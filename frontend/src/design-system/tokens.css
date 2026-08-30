@@ -1,0 +1,175 @@
+/* ============================================================================
+   DealFlow360 design tokens
+   ----------------------------------------------------------------------------
+   Two rules govern this file.
+
+   1. Semantic colour is derived from BACKEND ENUMS, not invented. Every risk,
+      policy, severity and status token below maps 1:1 onto a value the API can
+      return, so the palette cannot drift from the domain.
+   2. Colour is never decorative. A red number always means margin or risk. If
+      something needs emphasis but carries no state, it gets weight or space —
+      not hue.
+
+   Density values come from the ui-ux-pro-max "Data-Dense Dashboard" style row.
+   ========================================================================== */
+
+:root {
+  /* -- neutral ramp (cool slate) ------------------------------------------ */
+  --ink-950: #080c15;
+  --ink-900: #101828;
+  --ink-850: #16203350;
+  --ink-800: #1d2939;
+  --ink-700: #344054;
+  --ink-600: #475467;
+  --ink-500: #667085;
+  --ink-400: #98a2b3;
+  --ink-300: #d0d5dd;
+  --ink-200: #e4e7ec;
+  --ink-150: #eceff3;
+  --ink-100: #f2f4f7;
+  --ink-50: #f8fafc;
+  --white: #ffffff;
+
+  /* -- accent: deep azure. Deliberately NOT #3B82F6, the default SaaS blue - */
+  --accent-800: #06356b;
+  --accent-700: #0b4a8f;
+  --accent-600: #0e5fb5;
+  --accent-500: #1470d4;
+  --accent-400: #3b8fe8;
+  --accent-200: #b9d8f8;
+  --accent-100: #e3f0fd;
+  --accent-50: #f2f8fe;
+
+  /* -- signature: amber "governance" rail.
+        The wireframe explains every business rule in an amber callout. That
+        becomes a first-class primitive here: anywhere the system explains
+        WHY it did something, it is amber-railed. ---------------------------- */
+  --gov-700: #92400e;
+  --gov-600: #b45309;
+  --gov-500: #d97706;
+  --gov-300: #fcd34d;
+  --gov-100: #fef3c7;
+  --gov-50: #fffbeb;
+
+  /* -- RiskBand: NONE LOW MEDIUM HIGH CRITICAL ---------------------------- */
+  --risk-none: #667085;
+  --risk-none-bg: #f2f4f7;
+  --risk-low: #0e9f6e;
+  --risk-low-bg: #e7f8f1;
+  --risk-medium: #b45309;
+  --risk-medium-bg: #fef3c7;
+  --risk-high: #c2410c;
+  --risk-high-bg: #ffedd5;
+  --risk-critical: #be123c;
+  --risk-critical-bg: #ffe4e9;
+
+  /* -- PolicyResultStatus: PASSED WARNING VIOLATED NOT_APPLICABLE --------- */
+  --policy-passed: #0e9f6e;
+  --policy-passed-bg: #e7f8f1;
+  --policy-warning: #b45309;
+  --policy-warning-bg: #fef3c7;
+  --policy-violated: #be123c;
+  --policy-violated-bg: #ffe4e9;
+  --policy-na: #98a2b3;
+  --policy-na-bg: #f2f4f7;
+
+  /* -- Severity: LOW MEDIUM HIGH CRITICAL --------------------------------- */
+  --sev-low: #667085;
+  --sev-low-bg: #f2f4f7;
+  --sev-medium: #b45309;
+  --sev-medium-bg: #fef3c7;
+  --sev-high: #c2410c;
+  --sev-high-bg: #ffedd5;
+  --sev-critical: #be123c;
+  --sev-critical-bg: #ffe4e9;
+
+  /* -- QuoteVersionStatus: all 8 ------------------------------------------ */
+  --state-draft: #667085;
+  --state-draft-bg: #f2f4f7;
+  --state-pending: #b45309;
+  --state-pending-bg: #fef3c7;
+  --state-approved: #0e9f6e;
+  --state-approved-bg: #e7f8f1;
+  --state-sent: #1470d4;
+  --state-sent-bg: #e3f0fd;
+  --state-negotiating: #7c3aed;
+  --state-negotiating-bg: #f3ecfe;
+  --state-confirmed: #047857;
+  --state-confirmed-bg: #d9f2e6;
+  --state-rejected: #be123c;
+  --state-rejected-bg: #ffe4e9;
+  --state-superseded: #98a2b3;
+  --state-superseded-bg: #f2f4f7;
+
+  /* -- commercial semantics ----------------------------------------------- */
+  --margin-healthy: #0e9f6e;
+  --margin-thin: #b45309;
+  --margin-breach: #be123c;
+  --value-up: #0e9f6e;
+  --value-down: #be123c;
+  --value-flat: #667085;
+
+  /* -- surfaces ------------------------------------------------------------ */
+  --chrome: #0b1220; /* application chrome — the console frame */
+  --chrome-hi: #16223a;
+  --chrome-line: #23304b;
+  --chrome-text: #cbd5e1;
+  --chrome-text-dim: #8296b4;
+
+  --canvas: #f4f6f9; /* the workspace behind panels */
+  --surface: #ffffff;
+  --surface-sunken: #f8fafc;
+  --surface-raised: #ffffff;
+  --line: #e4e7ec;
+  --line-strong: #d0d5dd;
+
+  --text: #101828;
+  --text-secondary: #475467;
+  --text-muted: #667085;
+  --text-faint: #98a2b3;
+  --text-invert: #ffffff;
+
+  /* -- type ---------------------------------------------------------------- */
+  --font-ui: "Lexend", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-body: "Source Sans 3", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  /* Money must align on the decimal in a column and stay scannable at 12px. */
+  --font-num: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+
+  /* -- density (ui-ux-pro-max Data-Dense Dashboard) ------------------------ */
+  --header-h: 52px;
+  --subnav-h: 40px;
+  --row-h: 36px;
+  --row-h-tight: 32px;
+  --grid-gap: 8px;
+  --panel-pad: 16px;
+
+  /* -- radius: restrained. Heavy rounding at this density reads as a toy. -- */
+  --r-xs: 3px;
+  --r-sm: 4px;
+  --r-md: 6px;
+  --r-lg: 8px;
+  --r-xl: 12px;
+  --r-pill: 999px;
+
+  /* -- elevation: borders do the work; shadow only for floating layers ----- */
+  --shadow-pop: 0 4px 12px -2px rgb(16 24 40 / 0.1), 0 2px 4px -2px rgb(16 24 40 / 0.06);
+  --shadow-overlay: 0 20px 40px -12px rgb(8 12 21 / 0.28), 0 4px 12px -4px rgb(8 12 21 / 0.12);
+  --ring: 0 0 0 3px rgb(20 112 212 / 0.28);
+
+  /* -- motion: Subtle tier only (motion.csv) ------------------------------- */
+  --t-fast: 140ms;
+  --t-base: 200ms;
+  --t-slow: 280ms;
+  --ease: cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
