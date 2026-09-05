@@ -1,0 +1,20 @@
+__pycache__
+SKILLS_ALL
+
+# Secrets — never commit. See .env.example for the template.
+.env
+.env.*
+!.env.example
+
+# Virtualenvs
+.venv
+venv/
+
+# Tooling caches
+.pytest_cache
+.ruff_cache
+.mypy_cache
+
+# Local scratch
+baseline_tests.txt
+openapi_snapshot.json
