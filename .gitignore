@@ -18,3 +18,10 @@ venv/
 # Local scratch
 baseline_tests.txt
 openapi_snapshot.json
+
+# frontend
+frontend/node_modules/
+frontend/dist/
+frontend/e2e/shots/
+frontend/test-results/
+frontend/playwright-report/

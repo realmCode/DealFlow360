@@ -105,14 +105,14 @@ AUDIT: tuple[tuple[str, str, str], ...] = (
     ),
     (
         "Is money ever a float?",
-        "No — 95 NUMERIC columns, zero float columns, and no float survives in "
+        "No — 110 NUMERIC columns, zero float columns, and no float survives in "
         "any JSONB audit payload.",
         "tests/test_models.py::test_no_money_column_is_a_float",
     ),
     (
         "Can seed data be run twice safely?",
         "Yes — the second run creates nothing and disturbs no reservations.",
-        "tests/test_models.py::test_exactly_thirty_three_tables_are_mapped",
+        "tests/test_end_to_end.py::test_seeding_twice_creates_nothing_the_second_time",
     ),
     (
         "Is approval routing ever hardcoded for the demo?",

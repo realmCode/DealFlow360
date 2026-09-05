@@ -51,7 +51,7 @@ def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
     for item in items:
         test_fn = getattr(item, "function", None)
         if test_fn is not None and inspect.iscoroutinefunction(test_fn):
-            item.add_marker(pytest.mark.asyncio(loop_scope="session"))
+            item.add_marker(pytest.mark.asyncio(loop_scope="session"), append=False)
 
 
 @pytest_asyncio.fixture(scope="session", loop_scope="session", autouse=True)

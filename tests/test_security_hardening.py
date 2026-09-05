@@ -181,7 +181,9 @@ def test_a_correctly_configured_production_settings_object_is_accepted() -> None
 
 def test_development_keeps_the_permissive_defaults() -> None:
     """Open docs and open CORS are how a reviewer explores the system."""
-    settings = Settings(environment="development")
+    # _env_file=None so this asserts the class defaults rather than whatever
+    # CORS_ORIGINS the developer's own .env happens to set.
+    settings = Settings(environment="development", _env_file=None)
     assert settings.docs_enabled is True
     assert settings.cors_origin_list == ["*"]
     # A wildcard origin must never be paired with credentials.
