@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from datetime import date
 from decimal import Decimal
 
 import sqlalchemy as sa
@@ -95,6 +96,12 @@ class SalesOrderLine(UUIDPrimaryKeyMixin, OrgOwnedMixin, TimestampMixin, Base):
     recurring_periods: Mapped[int] = mapped_column(nullable=False, default=1)
 
     is_stock_tracked: Mapped[bool] = mapped_column(nullable=False, default=False)
+    #: Per-line override of the order's promised delivery date, for orders
+    #: where hardware and services land on different dates.
+    promised_delivery_date: Mapped[date | None] = mapped_column(
+        sa.Date, nullable=True
+    )
+
     quantity_allocated: Mapped[Quantity] = mapped_column(
         nullable=False, default=Decimal("0")
     )

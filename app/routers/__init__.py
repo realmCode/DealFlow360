@@ -18,6 +18,7 @@ from app.routers import (
     policies,
     products,
     quotes,
+    reports,
     users,
 )
 
@@ -37,6 +38,7 @@ ALL_ROUTERS: tuple[APIRouter, ...] = (
     orders.router,
     billing.router,
     dashboard.router,
+    reports.router,
 )
 
 __all__ = ["ALL_ROUTERS"]

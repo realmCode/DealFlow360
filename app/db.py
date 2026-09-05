@@ -19,19 +19,43 @@ _sessionmaker: async_sessionmaker[AsyncSession] | None = None
 
 
 def get_engine() -> AsyncEngine:
+    """The process-wide engine.
+
+    Test runs are pooled like production. The suite previously forced
+    ``NullPool`` because asyncpg connections are bound to the event loop that
+    created them, and a pooled connection reused across loops raises
+    "attached to a different loop". That workaround is no longer needed:
+    ``tests/conftest.py`` pins every async test and fixture to a single
+    session-scoped loop, so there is only ever one loop to be bound to.
+
+    It was also extremely expensive. ``NullPool`` opens a fresh TCP connection
+    and authentication handshake for *every statement*, measured at ~133 ms
+    per query against Dockerised PostgreSQL versus ~4.8 ms pooled — a 28x
+    penalty that dominated the whole suite, since a single test issues dozens
+    of statements.
+
+    ``DB_FORCE_NULLPOOL=true`` restores the old behaviour for anyone running
+    tests outside that single-loop arrangement.
+    """
     global _engine
     if _engine is None:
-        if settings.is_testing:
-            # asyncpg connections are bound to the event loop that created
-            # them. Under pytest, fixtures and tests can run on different
-            # loops, and a pooled connection reused across loops raises
-            # "attached to a different loop". NullPool opens and closes a
-            # connection within a single operation, which removes the problem
-            # entirely at the cost of per-query connect latency.
+        if settings.db_force_nullpool:
             _engine = create_async_engine(
                 settings.active_database_url,
                 echo=settings.db_echo,
                 poolclass=NullPool,
+                future=True,
+            )
+        elif settings.is_testing:
+            _engine = create_async_engine(
+                settings.active_database_url,
+                echo=settings.db_echo,
+                pool_size=settings.test_db_pool_size,
+                max_overflow=settings.test_db_max_overflow,
+                # Connections are short-lived within a session and the server
+                # is local, so pre-ping would add a round trip per checkout
+                # for no benefit.
+                pool_pre_ping=False,
                 future=True,
             )
         else:

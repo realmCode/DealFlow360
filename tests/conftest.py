@@ -72,13 +72,64 @@ async def _schema() -> AsyncIterator[None]:
     await dispose_engine()
 
 
+#: One round trip that reports which tables currently hold at least one row.
+#: `EXISTS ... LIMIT 1` stops at the first row, so this is an index/heap peek
+#: per table rather than a count.
+_DIRTY_TABLE_SQL = " UNION ALL ".join(
+    f"SELECT '{table}' AS name "
+    f'WHERE EXISTS (SELECT 1 FROM public."{table}" LIMIT 1)'
+    for table in EXPECTED_TABLES
+)
+
+
 @pytest_asyncio.fixture(loop_scope="session", autouse=True)
 async def _clean_tables() -> AsyncIterator[None]:
-    """Truncate everything between tests so each starts from a known state."""
+    """Reset to a known state between tests, touching only dirty tables.
+
+    Truncating all 38 tables unconditionally was the single largest cost in
+    the suite: `TRUNCATE` rewrites each relation's file and forces a sync, and
+    on Docker Desktop for Windows the backing filesystem makes that cost
+    seconds rather than milliseconds. Profiling showed 2.3-14.8s of *setup*
+    per test against 0.07-0.6s of actual test execution.
+
+    Most tests touch a handful of tables, so the fix is to ask which ones are
+    actually dirty — one query — and truncate just those. A test that only
+    reads pays nothing at all.
+    """
     engine = get_engine()
-    tables = ", ".join(f'public."{t}"' for t in EXPECTED_TABLES)
     async with engine.begin() as conn:
-        await conn.execute(sa.text(f"TRUNCATE {tables} RESTART IDENTITY CASCADE"))
+        dirty = {row[0] for row in await conn.execute(sa.text(_DIRTY_TABLE_SQL))}
+        if not dirty:
+            yield
+            return
+
+        # DELETE rather than TRUNCATE. TRUNCATE allocates a new relation file
+        # per table and syncs the data directory at commit, which benchmarked
+        # at a flat ~2.7s here irrespective of how many tables were involved
+        # — it is a fixed filesystem barrier, not per-table work, and
+        # synchronous_commit does not govern it. DELETE touches only heap
+        # pages, and test tables hold tens of rows at most.
+        #
+        # session_replication_role=replica suspends foreign-key triggers for
+        # this transaction, so deletion order does not matter and no CASCADE
+        # reasoning is required. Sequences are reset separately, which is
+        # cheap because it does not rewrite data files.
+        # asyncpg refuses multiple commands in one prepared statement, so
+        # these go one at a time. Only dirty tables are touched, so this is a
+        # handful of round trips at a few milliseconds each.
+        await conn.execute(sa.text("SET LOCAL synchronous_commit = OFF"))
+        await conn.execute(sa.text("SET LOCAL session_replication_role = replica"))
+        for table in (t for t in reversed(EXPECTED_TABLES) if t in dirty):
+            await conn.execute(sa.text(f'DELETE FROM public."{table}"'))
+        # audit_events.sequence is an IDENTITY column and tests assert on
+        # ordering, so restart it to keep numbering predictable per test.
+        if "audit_events" in dirty:
+            await conn.execute(
+                sa.text(
+                    'ALTER TABLE public."audit_events" '
+                    "ALTER COLUMN sequence RESTART WITH 1"
+                )
+            )
     yield
 
 
@@ -109,6 +160,53 @@ async def client() -> AsyncIterator[AsyncClient]:
 
 
 # ---------------------------------------------------------------- helpers
+def _is_page(payload: Any) -> bool:
+    """True for a ``Page[T]`` envelope: ``{items, total, limit, offset}``."""
+    return (
+        isinstance(payload, dict)
+        and "items" in payload
+        and "total" in payload
+        and "limit" in payload
+        and "offset" in payload
+    )
+
+
+class ApiResponse:
+    """Thin proxy over an httpx response that unwraps page envelopes.
+
+    List endpoints return ``{"items": [...], "total": n, ...}``. Assertions
+    almost always want the rows, so ``.json()`` returns ``items`` when the
+    payload is a page envelope and the raw body otherwise. Tests that need to
+    assert on the pagination metadata itself call ``.page()``.
+
+    This keeps a single, obvious convention rather than sprinkling
+    ``["items"]`` through every assertion, and means adding pagination to a
+    route does not churn unrelated tests.
+    """
+
+    __slots__ = ("_response",)
+
+    def __init__(self, response: Any) -> None:
+        self._response = response
+
+    def json(self) -> Any:
+        payload = self._response.json()
+        return payload["items"] if _is_page(payload) else payload
+
+    def page(self) -> dict[str, Any]:
+        """The full envelope. Fails if the endpoint is not paginated."""
+        payload = self._response.json()
+        assert _is_page(payload), (
+            f"{self._response.request.method} "
+            f"{self._response.request.url} did not return a Page envelope: "
+            f"{payload!r}"
+        )
+        return payload
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._response, name)
+
+
 class Api:
     """Thin authenticated wrapper that fails loudly on unexpected statuses."""
 
@@ -129,7 +227,7 @@ class Api:
         params: Any = None,
         headers: dict[str, str] | None = None,
         expect: int | tuple[int, ...] | None = None,
-    ):
+    ) -> ApiResponse:
         merged = {**self.headers, **(headers or {})}
         response = await self._client.request(
             method, url, json=json, params=params, headers=merged
@@ -140,7 +238,7 @@ class Api:
                 f"{method} {url} -> {response.status_code} "
                 f"(expected {allowed})\n{response.text}"
             )
-        return response
+        return ApiResponse(response)
 
     async def get(self, url: str, **kw: Any):
         return await self.request("GET", url, **kw)
@@ -282,3 +380,23 @@ async def build_canonical_quote(
 def money(value: Any) -> Decimal:
     """Parse an API money string into an exact Decimal."""
     return Decimal(str(value))
+
+
+def page_items(payload: Any) -> list[Any]:
+    """Unwrap a ``Page[T]`` response, or pass a bare list through.
+
+    List endpoints return ``{"items": [...], "total": n, "limit": n,
+    "offset": n}``. This helper keeps assertions readable and lets a test work
+    against either shape, since not every list route is paginated (small
+    reference collections like policies and warehouses are returned whole).
+    """
+    if isinstance(payload, dict) and "items" in payload:
+        return payload["items"]
+    return payload
+
+
+def page_total(payload: Any) -> int:
+    """The unpaginated row count from a ``Page[T]`` response."""
+    if isinstance(payload, dict) and "total" in payload:
+        return int(payload["total"])
+    return len(payload)

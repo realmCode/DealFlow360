@@ -120,7 +120,20 @@ SalesUser = Annotated[
 ApproverUser = Annotated[
     User, Depends(require_role(RoleCode.MANAGER, RoleCode.FINANCE, RoleCode.ADMIN))
 ]
+#: Fulfilment authority. Declared as a dependency rather than checked inside a
+#: handler so the restriction appears in the OpenAPI schema and generated
+#: clients, and so it cannot be dropped by a refactor without a contract test
+#: noticing.
 OpsUser = Annotated[User, Depends(require_role(RoleCode.OPS, RoleCode.ADMIN))]
+#: Allocation is deliberately broader than fulfilment: a rep may reserve stock
+#: for their own order, but only Ops ships it.
+AllocatingUser = Annotated[
+    User, Depends(require_role(RoleCode.OPS, RoleCode.SALES, RoleCode.ADMIN))
+]
+#: Invoicing and payment authority.
+FinanceUser = Annotated[
+    User, Depends(require_role(RoleCode.FINANCE, RoleCode.ADMIN))
+]
 
 
 async def get_idempotency_key(

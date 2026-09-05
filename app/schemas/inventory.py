@@ -23,6 +23,20 @@ class WarehouseCreate(ApiModel):
     shipping_cost_per_shipment: Decimal = Field(default=Decimal("0"), ge=0)
 
 
+class WarehouseUpdate(ApiModel):
+    name: str | None = Field(default=None, max_length=255)
+    region: str | None = Field(default=None, max_length=128)
+    address_line1: str | None = Field(default=None, max_length=255)
+    city: str | None = Field(default=None, max_length=128)
+    country: str | None = Field(default=None, max_length=64)
+    postal_code: str | None = Field(default=None, max_length=64)
+    #: Both of these feed the allocation split, so getting them wrong at
+    #: creation time previously had no remedy.
+    priority: int | None = Field(default=None, ge=0, le=10_000)
+    shipping_cost_per_shipment: Decimal | None = Field(default=None, ge=0)
+    is_active: bool | None = None
+
+
 class WarehouseRead(TimestampedRead):
     code: str
     name: str

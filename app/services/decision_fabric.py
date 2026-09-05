@@ -943,7 +943,94 @@ class DecisionFabric:
                 actor=actor,
             )
 
+        # ------------------------------------------- discount anomaly (B9.2)
+        # A behavioural signal, not a policy breach: this can fire on a quote
+        # where every ceiling is respected, and stay silent on one that
+        # breaches them. The two are independent by design.
+        drafts.extend(
+            await cls._raise_discount_anomaly(
+                session,
+                version=version,
+                quote=quote,
+                customer=customer,
+                label=label,
+                actor=actor,
+            )
+        )
+
         return drafts
+
+    @classmethod
+    async def _raise_discount_anomaly(
+        cls,
+        session: AsyncSession,
+        *,
+        version: QuoteVersion,
+        quote: Quote,
+        customer: str,
+        label: str,
+        actor: User | None,
+    ) -> list[dict[str, Any]]:
+        from app.services.anomaly_service import AnomalyService
+
+        author_name: str | None = None
+        author = await session.get(User, version.created_by_user_id)
+        if author is not None:
+            author_name = author.full_name
+
+        verdict = await AnomalyService.evaluate(
+            session, version=version, actor_name=author_name
+        )
+        if not verdict.is_anomaly:
+            await AttentionService.resolve(
+                session,
+                organization_id=version.organization_id,
+                source_type="quote_version",
+                source_id=version.id,
+                item_type=AttentionItemType.DISCOUNT_ANOMALY,
+                note="Discount is back in line with the seller's own history.",
+                actor=actor,
+            )
+            return []
+
+        title = f"Unusual discount on {label}"
+        impact = (
+            f"{verdict.value}% off list for {customer} is well above what this "
+            f"seller normally gives. Even where every line is inside its "
+            f"ceiling, a pattern of rising discounts erodes margin quietly."
+        )
+        action = (
+            "Review the justification with the seller. If the deal warrants it, "
+            "approve as normal; if it reflects drift, coach on pricing."
+        )
+        await AttentionService.upsert(
+            session,
+            organization_id=version.organization_id,
+            source_type="quote_version",
+            source_id=version.id,
+            item_type=AttentionItemType.DISCOUNT_ANOMALY,
+            severity=verdict.severity,
+            title=title,
+            reason=verdict.reason,
+            impact=impact,
+            owner_role=RoleCode.MANAGER,
+            recommended_action=action,
+            deal_id=quote.deal_id,
+            quote_id=quote.id,
+            detail=verdict.as_dict(),
+            actor=actor,
+        )
+        return [
+            {
+                "type": AttentionItemType.DISCOUNT_ANOMALY.value,
+                "severity": verdict.severity.value,
+                "title": title,
+                "reason": verdict.reason,
+                "impact": impact,
+                "owner_role": RoleCode.MANAGER.value,
+                "recommended_action": action,
+            }
+        ]
 
     # ----------------------------------------------------------- narrative
     @staticmethod

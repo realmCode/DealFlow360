@@ -269,6 +269,18 @@ class AttentionItemType(StrEnum):
     INVENTORY_SHORTAGE = "INVENTORY_SHORTAGE"
     CUSTOMER_RESPONSE_REQUIRED = "CUSTOMER_RESPONSE_REQUIRED"
     ORDER_BLOCKED = "ORDER_BLOCKED"
+    #: PDF B9.2 — a discount well above this rep's own historical average.
+    #: Distinct from MARGIN_VIOLATION, which is an absolute policy breach:
+    #: this fires on behavioural drift even when every ceiling is respected.
+    DISCOUNT_ANOMALY = "DISCOUNT_ANOMALY"
+    #: PDF B9.3 — promised delivery date is at risk or already missed.
+    DELIVERY_SLIPPAGE = "DELIVERY_SLIPPAGE"
+    #: PDF B9.1 — no customer movement for the configured window.
+    STALLED_DEAL = "STALLED_DEAL"
+    #: An approval step has waited beyond the configured SLA.
+    APPROVAL_SLA_BREACH = "APPROVAL_SLA_BREACH"
+    #: Stock has fallen to or below the warehouse reorder point (PDF A4.3).
+    INVENTORY_REORDER_NEEDED = "INVENTORY_REORDER_NEEDED"
 
 
 class AttentionItemStatus(StrEnum):
@@ -367,6 +379,28 @@ class PaymentStatus(StrEnum):
     REFUNDED = "REFUNDED"
 
 
+class CreditNoteStatus(StrEnum):
+    DRAFT = "DRAFT"
+    ISSUED = "ISSUED"
+    #: Fully consumed — either refunded in cash or offset against billing.
+    APPLIED = "APPLIED"
+    VOID = "VOID"
+
+
+class CreditNoteReason(StrEnum):
+    SUBSCRIPTION_CANCELLED = "SUBSCRIPTION_CANCELLED"
+    SUBSCRIPTION_DOWNGRADED = "SUBSCRIPTION_DOWNGRADED"
+    ORDER_CANCELLED = "ORDER_CANCELLED"
+    BILLING_CORRECTION = "BILLING_CORRECTION"
+    GOODWILL = "GOODWILL"
+
+
+class SubscriptionChangeType(StrEnum):
+    QUANTITY = "QUANTITY"
+    INTERVAL = "INTERVAL"
+    CANCELLATION = "CANCELLATION"
+
+
 # ------------------------------------------------------------------- system
 class IdempotencyStatus(StrEnum):
     IN_PROGRESS = "IN_PROGRESS"
@@ -409,6 +443,9 @@ ALL_ENUMS: tuple[type[StrEnum], ...] = (
     InvoiceStatus,
     PaymentMethod,
     PaymentStatus,
+    CreditNoteStatus,
+    CreditNoteReason,
+    SubscriptionChangeType,
     IdempotencyStatus,
 )
 

@@ -6,6 +6,10 @@ from fastapi import APIRouter, Request, status
 
 from app.dependencies import DbSession, client_ip
 from app.events import EventType
+from app.middleware.rate_limit import (
+    clear_auth_rate_limit,
+    enforce_auth_rate_limit,
+)
 from app.schemas.auth import (
     AuthenticatedUser,
     LoginRequest,
@@ -29,8 +33,11 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 async def signup(
     payload: SignupRequest, db: DbSession, request: Request
 ) -> LoginResponse:
-    user = await IdentityService.signup(db, payload, ip_address=client_ip(request))
+    ip = client_ip(request)
+    enforce_auth_rate_limit(ip=ip, email=payload.email)
+    user = await IdentityService.signup(db, payload, ip_address=ip)
     await db.commit()
+    clear_auth_rate_limit(ip=ip, email=payload.email)
     return LoginResponse(
         tokens=TokenPair(**IdentityService.issue_tokens(user)),
         user=AuthenticatedUser(**IdentityService.to_authenticated(user)),
@@ -41,6 +48,9 @@ async def signup(
 async def login(
     payload: LoginRequest, db: DbSession, request: Request
 ) -> LoginResponse:
+    ip = client_ip(request)
+    # Enforced before the bcrypt verify, so a flood cannot be used to burn CPU.
+    enforce_auth_rate_limit(ip=ip, email=payload.email)
     user = await IdentityService.authenticate(
         db, email=payload.email, password=payload.password
     )
@@ -52,9 +62,10 @@ async def login(
         entity_id=user.id,
         actor=user,
         payload={"role": user.role_code.value},
-        ip_address=client_ip(request),
+        ip_address=ip,
     )
     await db.commit()
+    clear_auth_rate_limit(ip=ip, email=payload.email)
     return LoginResponse(
         tokens=TokenPair(**IdentityService.issue_tokens(user)),
         user=AuthenticatedUser(**IdentityService.to_authenticated(user)),
@@ -64,6 +75,11 @@ async def login(
 @router.post(
     "/refresh", response_model=TokenPair, summary="Rotate an access token"
 )
-async def refresh(payload: RefreshRequest, db: DbSession) -> TokenPair:
+async def refresh(
+    payload: RefreshRequest, db: DbSession, request: Request
+) -> TokenPair:
+    ip = client_ip(request)
+    enforce_auth_rate_limit(ip=ip, email=None)
     user = await IdentityService.refresh(db, payload.refresh_token)
+    clear_auth_rate_limit(ip=ip, email=None)
     return TokenPair(**IdentityService.issue_tokens(user))

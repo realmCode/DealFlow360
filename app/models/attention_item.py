@@ -101,3 +101,38 @@ class AttentionItem(UUIDPrimaryKeyMixin, OrgOwnedMixin, TimestampMixin, Base):
         nullable=True,
     )
     resolution_note: Mapped[LongText | None] = mapped_column(nullable=True)
+
+    # ------------------------------------------------------------- actions
+    # PDF B9: "An automated nudge or escalation action can be triggered from an
+    # alert." Resolve alone made the queue a list rather than a workflow, and
+    # left AttentionItemStatus.ACKNOWLEDGED unreachable.
+    acknowledged_at: Mapped[datetime | None] = mapped_column(
+        sa.DateTime(timezone=True), nullable=True
+    )
+    acknowledged_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True),
+        sa.ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    #: How many times the owner has been nudged. Surfaced so a repeatedly
+    #: ignored alert is itself visible as a problem.
+    nudge_count: Mapped[int] = mapped_column(
+        sa.Integer, nullable=False, default=0, server_default=sa.text("0")
+    )
+    last_nudged_at: Mapped[datetime | None] = mapped_column(
+        sa.DateTime(timezone=True), nullable=True
+    )
+    last_nudged_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True),
+        sa.ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    escalated_at: Mapped[datetime | None] = mapped_column(
+        sa.DateTime(timezone=True), nullable=True
+    )
+    escalated_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True),
+        sa.ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    escalation_note: Mapped[LongText | None] = mapped_column(nullable=True)

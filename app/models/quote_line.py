@@ -111,7 +111,19 @@ class QuoteLine(UUIDPrimaryKeyMixin, OrgOwnedMixin, TimestampMixin, Base):
         nullable=False, default=Decimal("0.0000")
     )
     gross_amount: Mapped[Money] = mapped_column(nullable=False, default=Decimal("0.00"))
+    #: Line-level discount only, so it always reconciles against
+    #: ``discount_pct``. The order-level share is tracked separately.
     discount_amount: Mapped[Money] = mapped_column(nullable=False, default=Decimal("0.00"))
+    #: This line's share of ``quote_versions.order_discount_pct``.
+    order_discount_amount: Mapped[Money] = mapped_column(
+        nullable=False, default=Decimal("0.00"), server_default=sa.text("0")
+    )
+    #: The compounded discount off list once both tiers apply. This is the
+    #: value the PolicyEngine evaluates against category ceilings, so an
+    #: order-level giveaway cannot bypass a per-line limit.
+    effective_discount_pct: Mapped[Percent] = mapped_column(
+        nullable=False, default=Decimal("0.0000"), server_default=sa.text("0")
+    )
     net_amount: Mapped[Money] = mapped_column(nullable=False, default=Decimal("0.00"))
     tax_amount: Mapped[Money] = mapped_column(nullable=False, default=Decimal("0.00"))
     total_amount: Mapped[Money] = mapped_column(nullable=False, default=Decimal("0.00"))

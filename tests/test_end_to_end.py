@@ -21,7 +21,7 @@ from decimal import Decimal
 
 import pytest
 
-from tests.conftest import login, money as parse
+from tests.conftest import login, money as parse, page_items
 
 pytestmark = pytest.mark.asyncio(loop_scope="session")
 
@@ -57,7 +57,7 @@ async def test_canonical_end_to_end_flow(client, capsys) -> None:
     assert me["role"] == "SALES"
     assert me["organization_name"] == "TechSupply Solutions"
 
-    products = {p["sku"]: p for p in (await sales.get("/products", expect=200)).json()}
+    products = {p["sku"]: p for p in page_items((await sales.get("/products", expect=200)).json())}
     assert len(products) == 4
     assert parse(products["HW-LAPTOP-01"]["list_price"]) == Decimal("1200.0000")
     assert parse(products["HW-LAPTOP-01"]["internal_cost"]) == Decimal("800.0000")
@@ -77,7 +77,7 @@ async def test_canonical_end_to_end_flow(client, capsys) -> None:
     step("Catalog (4 products), warehouses (Main 60 / East 40), 6 policies loaded")
 
     policies = (await sales.get("/policies", expect=200)).json()
-    assert len(policies) == 6
+    assert len(policies) == 7
 
     # ==================================================================
     scene("SCENE 1 — Sales builds the deal and submits it")
@@ -388,7 +388,7 @@ async def test_canonical_end_to_end_flow(client, capsys) -> None:
     ).json()
     assert replay["idempotent_replay"] is True
     assert replay["order"]["id"] == order_id
-    orders = (await sales.get("/orders", expect=200)).json()
+    orders = page_items((await sales.get("/orders", expect=200)).json())
     assert len(orders) == 1, "duplicate confirmation created a second order"
     step("Retried confirmation replayed the same order — exactly one order exists")
 

@@ -99,7 +99,13 @@ from app.models.policy import Policy
 from app.models.policy_result import PolicyResult
 from app.models.quote_line import QuoteLine
 from app.models.quote_version import QuoteVersion
-from app.services.commercial_engine import HUNDRED, ZERO, money, pct
+from app.services.commercial_engine import (
+    HUNDRED,
+    ZERO,
+    CommercialEngine,
+    money,
+    pct,
+)
 
 # Component caps (percentage points of the 0-100 score).
 CAP_OVERAGE = Decimal("45")
@@ -317,8 +323,16 @@ class PolicyEngine:
         lines: Sequence[QuoteLine],
         profile: CustomerProfile | None,
         policies: Sequence[Policy],
+        weights: dict[str, Decimal] | None = None,
+        escalation_threshold: Decimal | None = None,
     ) -> PolicyEvaluation:
-        """Pure evaluation — no I/O, so it is trivially unit-testable."""
+        """Pure evaluation — no I/O, so it is trivially unit-testable.
+
+        ``weights`` and ``escalation_threshold`` come from the organization's
+        settings when a caller has a session; omitting them falls back to the
+        environment defaults, which keeps this function callable with no I/O
+        and makes what-if simulation trivial.
+        """
         tier = profile.tier if profile else CustomerTier.BRONZE
         profile_id = profile.id if profile else None
         outcomes: list[PolicyOutcome] = []
@@ -329,7 +343,17 @@ class PolicyEngine:
         weighted_overage_total = ZERO
         violating_lines = 0
 
+        # PDF B3 allows a discount at the line tier, the order tier, or both.
+        # Ceilings are evaluated against the two compounded, because checking
+        # the line tier alone would let a rep keep every line nominally
+        # compliant and move the real giveaway into the order tier — the exact
+        # evasion PDF section 10 describes.
+        order_discount_pct = pct(Decimal(version.order_discount_pct or ZERO))
+
         for line in lines:
+            effective_discount = CommercialEngine.combined_discount_pct(
+                Decimal(line.discount_pct), order_discount_pct
+            )
             policy = cls._match(
                 policies,
                 PolicyType.CATEGORY_DISCOUNT_CEILING,
@@ -343,7 +367,7 @@ class PolicyEngine:
                         rule="CATEGORY_DISCOUNT_CEILING",
                         status=PolicyResultStatus.NOT_APPLICABLE,
                         subject=line.description,
-                        actual_value=pct(line.discount_pct),
+                        actual_value=effective_discount,
                         scope_category=line.category,
                         scope_tier=tier,
                         quote_line_id=line.id,
@@ -351,7 +375,7 @@ class PolicyEngine:
                             f"No discount ceiling is configured for "
                             f"{line.category.value.title()} products at "
                             f"{tier.value.title()} tier, so the "
-                            f"{pct(line.discount_pct)}% discount on "
+                            f"{effective_discount}% discount on "
                             f"'{line.description}' was not constrained."
                         ),
                         detail={"line_number": line.line_number},
@@ -359,7 +383,7 @@ class PolicyEngine:
                 )
                 continue
 
-            actual = pct(line.discount_pct)
+            actual = effective_discount
             threshold = pct(policy.threshold_value)
             revenue_share = (
                 Decimal(line.net_amount) / net_revenue if net_revenue > ZERO else ZERO
@@ -403,6 +427,9 @@ class PolicyEngine:
                             "line_net_amount": str(money(line.net_amount)),
                             "revenue_share": str(pct(revenue_share * HUNDRED)),
                             "weighted_overage": str(pct(weighted)),
+                            "line_discount_pct": str(pct(line.discount_pct)),
+                            "order_discount_pct": str(order_discount_pct),
+                            "effective_discount_pct": str(effective_discount),
                         },
                     )
                 )
@@ -624,8 +651,11 @@ class PolicyEngine:
             violating_lines=violating_lines,
             margin_shortfall=margin_shortfall,
             effective_discount_pct=pct(version.effective_discount_pct or ZERO),
+            weights=weights,
         )
-        required = cls._route_approvals(outcomes, blended)
+        required = cls._route_approvals(
+            outcomes, blended, escalation_threshold=escalation_threshold
+        )
 
         return PolicyEvaluation(
             quote_version_id=version.id,
@@ -644,11 +674,18 @@ class PolicyEngine:
         violating_lines: int,
         margin_shortfall: Decimal,
         effective_discount_pct: Decimal,
+        weights: dict[str, Decimal] | None = None,
     ) -> BlendedRisk:
-        w_overage = settings.risk_discount_overage_weight
-        w_breadth = settings.risk_breadth_weight
-        w_margin = settings.risk_margin_weight
-        w_depth = settings.risk_depth_weight
+        # Per-organization weights when supplied (PDF A3 requires the chain to
+        # be configurable); the environment defaults otherwise, so `evaluate`
+        # stays callable without a session.
+        weights = weights or {}
+        w_overage = weights.get(
+            "overage", settings.risk_discount_overage_weight
+        )
+        w_breadth = weights.get("breadth", settings.risk_breadth_weight)
+        w_margin = weights.get("margin", settings.risk_margin_weight)
+        w_depth = weights.get("depth", settings.risk_depth_weight)
 
         p1 = min(CAP_OVERAGE, pct(weighted_overage_total * w_overage))
         p2 = min(CAP_BREADTH, pct(Decimal(violating_lines) * w_breadth))
@@ -735,7 +772,10 @@ class PolicyEngine:
     # -------------------------------------------------------------- routing
     @staticmethod
     def _route_approvals(
-        outcomes: Sequence[PolicyOutcome], blended: BlendedRisk
+        outcomes: Sequence[PolicyOutcome],
+        blended: BlendedRisk,
+        *,
+        escalation_threshold: Decimal | None = None,
     ) -> list[RequiredApprovalSpec]:
         by_level: dict[ApprovalLevel, RequiredApprovalSpec] = {}
 
@@ -750,7 +790,11 @@ class PolicyEngine:
                 by_level[outcome.required_action] = spec
             spec.triggered_by.append(outcome.reason)
 
-        threshold = settings.risk_finance_escalation_threshold
+        threshold = (
+            escalation_threshold
+            if escalation_threshold is not None
+            else settings.risk_finance_escalation_threshold
+        )
         if blended.score >= threshold:
             spec = by_level.setdefault(
                 ApprovalLevel.FINANCE,
@@ -795,8 +839,25 @@ class PolicyEngine:
             )
         policies = await cls.active_policies(session, version.organization_id)
 
+        from app.services.settings_service import SettingsService
+
+        org_settings = await SettingsService.for_org(
+            session, version.organization_id
+        )
         evaluation = cls.evaluate(
-            version=version, lines=lines, profile=profile, policies=policies
+            version=version,
+            lines=lines,
+            profile=profile,
+            policies=policies,
+            weights={
+                "overage": Decimal(org_settings.risk_discount_overage_weight),
+                "breadth": Decimal(org_settings.risk_breadth_weight),
+                "margin": Decimal(org_settings.risk_margin_weight),
+                "depth": Decimal(org_settings.risk_depth_weight),
+            },
+            escalation_threshold=Decimal(
+                org_settings.finance_escalation_threshold
+            ),
         )
 
         await session.execute(

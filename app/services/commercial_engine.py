@@ -23,6 +23,31 @@ For one-time lines ``recurring_periods`` is 1, so this reduces to the obvious
 formula. For recurring lines ``unit_list_price`` is the price *per period*, so
 multiplying by the period count yields total contract value — which is what
 discount ceilings and margin floors must be judged against.
+
+Two discount tiers
+------------------
+PDF B3 requires "line level **or** order level discounts". Both may apply at
+once, and they **compound** rather than add:
+
+    net = gross × (1 − line_pct/100) × (1 − order_pct/100)
+
+so the true discount off list for a line is
+
+    effective_pct = 100 × (1 − (1 − line_pct/100) × (1 − order_pct/100))
+
+``effective_pct`` — not ``line_pct`` — is what the PolicyEngine evaluates
+against category ceilings. That matters: if ceilings were checked against the
+line discount alone, a rep could keep every line nominally compliant and move
+the real giveaway into an unchecked order-level field. PDF §10 names precisely
+that failure ("keeping every line technically within limits while still
+discounting the order more than the company intends overall"), so leaving the
+order tier out of ceiling evaluation would reintroduce the loophole the blended
+score exists to close.
+
+Because the order-level rate is a single percentage applied to every line's
+net, distributing it pro-rata by revenue share and applying it uniformly give
+identical results — the compounded form above is simply the closed-form version
+of that distribution, without accumulating rounding error.
 """
 
 from __future__ import annotations
@@ -85,11 +110,20 @@ def safe_pct(numerator: Decimal, denominator: Decimal) -> Decimal:
 
 @dataclass(slots=True)
 class LineCalculation:
-    """Derived values for one line. Pure output — no DB access."""
+    """Derived values for one line. Pure output — no DB access.
+
+    ``discount_amount`` is the *line-level* discount only, so it always
+    reconciles against ``discount_pct``. The order-level share is reported
+    separately in ``order_discount_amount``, and ``net_amount`` is net of both
+    so the printed line items still sum to the printed order total.
+    """
 
     unit_net_price: Decimal
     gross_amount: Decimal
     discount_amount: Decimal
+    order_discount_amount: Decimal
+    total_discount_amount: Decimal
+    effective_discount_pct: Decimal
     net_amount: Decimal
     tax_amount: Decimal
     total_amount: Decimal
@@ -103,7 +137,11 @@ class QuoteTotals:
     """Derived totals for a whole version. Pure output — no DB access."""
 
     gross_revenue: Decimal = ZERO
+    #: Line-level discounts plus the order-level discount.
     total_discount: Decimal = ZERO
+    #: The order-level component alone, so the split stays auditable.
+    line_discount_total: Decimal = ZERO
+    order_discount_amount: Decimal = ZERO
     net_revenue: Decimal = ZERO
     tax_amount: Decimal = ZERO
     total_revenue: Decimal = ZERO
@@ -122,6 +160,20 @@ class CommercialEngine:
 
     # ------------------------------------------------------------ pure maths
     @staticmethod
+    def combined_discount_pct(
+        line_discount_pct: Decimal, order_discount_pct: Decimal = ZERO
+    ) -> Decimal:
+        """The true discount off list once both tiers compound.
+
+        This is the figure category ceilings must be judged against — see the
+        module docstring for why evaluating the line tier alone would leave a
+        governance loophole.
+        """
+        line_remaining = (HUNDRED - Decimal(line_discount_pct)) / HUNDRED
+        order_remaining = (HUNDRED - Decimal(order_discount_pct)) / HUNDRED
+        return pct(HUNDRED - (line_remaining * order_remaining * HUNDRED))
+
+    @staticmethod
     def calculate_line(
         *,
         quantity: Decimal,
@@ -130,18 +182,33 @@ class CommercialEngine:
         discount_pct: Decimal = ZERO,
         tax_rate_pct: Decimal = ZERO,
         recurring_periods: int = 1,
+        order_discount_pct: Decimal = ZERO,
     ) -> LineCalculation:
         quantity = Decimal(quantity)
         unit_list_price = Decimal(unit_list_price)
         unit_cost = Decimal(unit_cost)
         discount_pct = Decimal(discount_pct)
         tax_rate_pct = Decimal(tax_rate_pct)
+        order_discount_pct = Decimal(order_discount_pct)
         periods = Decimal(recurring_periods)
 
         gross_amount = money(quantity * unit_list_price * periods)
         discount_amount = money(gross_amount * discount_pct / HUNDRED)
-        net_amount = money(gross_amount - discount_amount)
-        unit_net_price = unit(unit_list_price * (HUNDRED - discount_pct) / HUNDRED)
+        net_after_line = money(gross_amount - discount_amount)
+
+        # The order tier applies to what is left after the line tier, which is
+        # what makes the two compound rather than add.
+        order_discount_amount = money(net_after_line * order_discount_pct / HUNDRED)
+        net_amount = money(net_after_line - order_discount_amount)
+
+        effective_discount_pct = CommercialEngine.combined_discount_pct(
+            discount_pct, order_discount_pct
+        )
+        unit_net_price = unit(
+            unit_list_price * (HUNDRED - effective_discount_pct) / HUNDRED
+        )
+        # Tax is charged on the amount actually invoiced, so it follows the
+        # post-order-discount net.
         tax_amount = money(net_amount * tax_rate_pct / HUNDRED)
         total_amount = money(net_amount + tax_amount)
         line_cost = money(quantity * unit_cost * periods)
@@ -151,6 +218,9 @@ class CommercialEngine:
             unit_net_price=unit_net_price,
             gross_amount=gross_amount,
             discount_amount=discount_amount,
+            order_discount_amount=order_discount_amount,
+            total_discount_amount=money(discount_amount + order_discount_amount),
+            effective_discount_pct=effective_discount_pct,
             net_amount=net_amount,
             tax_amount=tax_amount,
             total_amount=total_amount,
@@ -166,7 +236,9 @@ class CommercialEngine:
         totals = QuoteTotals(line_count=len(items))
         for calc, billing_type in items:
             totals.gross_revenue += calc.gross_amount
-            totals.total_discount += calc.discount_amount
+            totals.line_discount_total += calc.discount_amount
+            totals.order_discount_amount += calc.order_discount_amount
+            totals.total_discount += calc.total_discount_amount
             totals.net_revenue += calc.net_amount
             totals.tax_amount += calc.tax_amount
             totals.total_cost += calc.line_cost
@@ -176,6 +248,8 @@ class CommercialEngine:
                 totals.one_time_revenue += calc.net_amount
 
         totals.gross_revenue = money(totals.gross_revenue)
+        totals.line_discount_total = money(totals.line_discount_total)
+        totals.order_discount_amount = money(totals.order_discount_amount)
         totals.total_discount = money(totals.total_discount)
         totals.net_revenue = money(totals.net_revenue)
         totals.tax_amount = money(totals.tax_amount)
@@ -193,7 +267,9 @@ class CommercialEngine:
 
     # ------------------------------------------------------ persistence path
     @classmethod
-    def apply_to_line(cls, line: QuoteLine) -> LineCalculation:
+    def apply_to_line(
+        cls, line: QuoteLine, *, order_discount_pct: Decimal = ZERO
+    ) -> LineCalculation:
         """Recalculate one ORM line in place and return the derived values."""
         calc = cls.calculate_line(
             quantity=line.quantity,
@@ -202,10 +278,13 @@ class CommercialEngine:
             discount_pct=line.discount_pct,
             tax_rate_pct=line.tax_rate_pct,
             recurring_periods=line.recurring_periods,
+            order_discount_pct=order_discount_pct,
         )
         line.unit_net_price = calc.unit_net_price
         line.gross_amount = calc.gross_amount
         line.discount_amount = calc.discount_amount
+        line.order_discount_amount = calc.order_discount_amount
+        line.effective_discount_pct = calc.effective_discount_pct
         line.net_amount = calc.net_amount
         line.tax_amount = calc.tax_amount
         line.total_amount = calc.total_amount
@@ -243,10 +322,12 @@ class CommercialEngine:
             list(lines) if lines is not None else await cls.load_lines(session, version.id)
         )
 
+        order_discount_pct = Decimal(version.order_discount_pct or ZERO)
+
         calcs: list[tuple[LineCalculation, BillingType]] = []
         line_details: list[dict[str, Any]] = []
         for line in line_list:
-            calc = cls.apply_to_line(line)
+            calc = cls.apply_to_line(line, order_discount_pct=order_discount_pct)
             calcs.append((calc, line.billing_type))
             line_details.append(
                 {
@@ -260,6 +341,8 @@ class CommercialEngine:
                     "unit_cost": str(line.unit_cost),
                     "unit_net_price": str(calc.unit_net_price),
                     "discount_pct": str(line.discount_pct),
+                    "order_discount_amount": str(calc.order_discount_amount),
+                    "effective_discount_pct": str(calc.effective_discount_pct),
                     "gross_amount": str(calc.gross_amount),
                     "discount_amount": str(calc.discount_amount),
                     "net_amount": str(calc.net_amount),
@@ -281,6 +364,9 @@ class CommercialEngine:
 
         version.gross_revenue = totals.gross_revenue
         version.total_discount = totals.total_discount
+        # Summed from the per-line shares rather than recomputed from the
+        # percentage, so the stored figure matches the lines exactly.
+        version.order_discount_amount = totals.order_discount_amount
         version.net_revenue = totals.net_revenue
         version.tax_amount = totals.tax_amount
         version.total_revenue = totals.total_revenue
@@ -336,9 +422,12 @@ class CommercialEngine:
                 "currency": version.currency,
                 "line_count": totals.line_count,
                 "lines": totals.lines,
+                "order_discount_pct": str(version.order_discount_pct),
                 "totals": {
                     "gross_revenue": str(totals.gross_revenue),
                     "total_discount": str(totals.total_discount),
+                    "line_discount_total": str(totals.line_discount_total),
+                    "order_discount_amount": str(totals.order_discount_amount),
                     "net_revenue": str(totals.net_revenue),
                     "tax_amount": str(totals.tax_amount),
                     "total_revenue": str(totals.total_revenue),

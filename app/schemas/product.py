@@ -43,6 +43,9 @@ class ProductUpdate(ApiModel):
     internal_cost: Decimal | None = Field(default=None, ge=0)
     tax_rate_pct: Decimal | None = Field(default=None, ge=0, le=100)
     is_active: bool | None = None
+    #: PDF A6.2 — promoted products rank higher in upsell suggestions and
+    #: carry a promotion tag in the panel.
+    is_promoted: bool | None = None
 
 
 class ProductRead(TimestampedRead):
@@ -61,6 +64,9 @@ class ProductRead(TimestampedRead):
     default_recurring_periods: int
     is_stock_tracked: bool
     is_active: bool
+    is_promoted: bool = False
+    #: Convenience for the builder: unit_margin is list_price - internal_cost.
+    unit_margin: Decimal | None = None
 
 
 class ProductPublicRead(ReadModel):
@@ -86,6 +92,14 @@ class ProductVariantCreate(ApiModel):
     cost_delta: Decimal = Field(default=Decimal("0"))
 
 
+class ProductVariantUpdate(ApiModel):
+    name: str | None = Field(default=None, max_length=255)
+    attributes: dict[str, Any] | None = None
+    price_delta: Decimal | None = None
+    cost_delta: Decimal | None = None
+    is_active: bool | None = None
+
+
 class ProductVariantRead(TimestampedRead):
     product_id: uuid.UUID
     sku: str
@@ -104,6 +118,17 @@ class PriceListCreate(ApiModel):
     rules: list[dict[str, Any]] = Field(default_factory=list)
     valid_from: date | None = None
     valid_to: date | None = None
+
+
+class PriceListUpdate(ApiModel):
+    name: str | None = Field(default=None, max_length=255)
+    tier: CustomerTier | None = None
+    #: Replaces the whole rule set. Each entry is
+    #: ``{"product_id": "<uuid>", "unit_price": "1100.00"}``.
+    rules: list[dict[str, Any]] | None = None
+    valid_from: date | None = None
+    valid_to: date | None = None
+    is_active: bool | None = None
 
 
 class PriceListRead(TimestampedRead):

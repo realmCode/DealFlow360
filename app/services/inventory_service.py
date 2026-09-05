@@ -42,6 +42,7 @@ from app.enums import (
     AllocationMode,
     AllocationStatus,
     AttentionItemType,
+    BillingScheduleStatus,
     FulfillmentStatus,
     RoleCode,
     SalesOrderStatus,
@@ -54,6 +55,7 @@ from app.errors import (
     NotFoundError,
 )
 from app.events import EventType
+from app.models.billing_schedule import BillingSchedule
 from app.models.fulfillment import Fulfillment
 from app.models.inventory import Inventory
 from app.models.inventory_allocation import InventoryAllocation
@@ -963,3 +965,255 @@ class InventoryService:
             },
         )
         return created
+
+    # ------------------------------------------------------------- delivery
+    @classmethod
+    async def confirm_delivery(
+        cls,
+        session: AsyncSession,
+        *,
+        order: SalesOrder,
+        fulfillment_id: uuid.UUID,
+        actor: User,
+        delivered_at: datetime | None = None,
+        note: str | None = None,
+    ) -> Fulfillment:
+        """Mark a shipment delivered.
+
+        ``FulfillmentStatus.DELIVERED`` was previously unreachable, which meant
+        PDF B9.3's slippage indicator had no completion signal to measure
+        against: a shipment sitting in transit for a month looked identical to
+        one that arrived the next day.
+        """
+        fulfillment = await session.get(Fulfillment, fulfillment_id)
+        if (
+            fulfillment is None
+            or fulfillment.sales_order_id != order.id
+            or fulfillment.organization_id != order.organization_id
+        ):
+            raise NotFoundError("Fulfilment not found on this order.")
+        if fulfillment.status is FulfillmentStatus.DELIVERED:
+            raise ConflictError(
+                "This shipment is already confirmed delivered.",
+                code="ALREADY_DELIVERED",
+                details={"fulfillment_number": fulfillment.fulfillment_number},
+            )
+        if fulfillment.status is not FulfillmentStatus.SHIPPED:
+            raise ConflictError(
+                f"A {fulfillment.status.value} shipment cannot be marked "
+                f"delivered.",
+                code="FULFILLMENT_NOT_SHIPPED",
+                details={"status": fulfillment.status.value},
+            )
+
+        when = delivered_at or datetime.now(UTC)
+        fulfillment.status = FulfillmentStatus.DELIVERED
+        fulfillment.delivered_at = when
+        if note:
+            fulfillment.notes = note
+        await session.flush()
+
+        siblings = list(
+            (
+                await session.execute(
+                    select(Fulfillment).where(
+                        Fulfillment.sales_order_id == order.id
+                    )
+                )
+            ).scalars()
+        )
+        all_delivered = all(
+            f.status is FulfillmentStatus.DELIVERED for f in siblings
+        )
+
+        promised = order.promised_delivery_date
+        late_by = (
+            (when.date() - promised).days
+            if promised is not None and when.date() > promised
+            else 0
+        )
+
+        await AuditService.emit(
+            session,
+            EventType.ORDER_DELIVERED,
+            organization_id=order.organization_id,
+            entity_type="sales_order",
+            entity_id=order.id,
+            actor=actor,
+            payload={
+                "order_number": order.order_number,
+                "fulfillment_number": fulfillment.fulfillment_number,
+                "delivered_at": when.isoformat(),
+                "promised_delivery_date": (
+                    promised.isoformat() if promised else None
+                ),
+                "days_late": late_by,
+                "all_shipments_delivered": all_delivered,
+                "note": note,
+            },
+        )
+
+        if all_delivered:
+            # Delivery closes the slippage question for this order either way.
+            await AttentionService.resolve(
+                session,
+                organization_id=order.organization_id,
+                source_type="sales_order",
+                source_id=order.id,
+                item_type=AttentionItemType.DELIVERY_SLIPPAGE,
+                note=(
+                    f"All shipments delivered {when.date().isoformat()}"
+                    + (f", {late_by} day(s) late." if late_by else " on time.")
+                ),
+                actor=actor,
+            )
+        return fulfillment
+
+    # --------------------------------------------------------------- cancel
+    @classmethod
+    async def cancel_order(
+        cls,
+        session: AsyncSession,
+        *,
+        order: SalesOrder,
+        actor: User,
+        reason: str,
+    ) -> SalesOrder:
+        """Cancel an order and release every outstanding reservation.
+
+        Releasing matters more than the status change: a reservation holds
+        ``quantity_reserved`` against real stock, so an order abandoned after
+        allocation would otherwise make that stock permanently unsellable while
+        appearing available in no report.
+        """
+        if order.status is SalesOrderStatus.CANCELLED:
+            raise ConflictError(
+                "This order is already cancelled.",
+                code="ORDER_ALREADY_CANCELLED",
+                details={"order_number": order.order_number},
+            )
+        shipped = (
+            await session.execute(
+                select(func.count())
+                .select_from(InventoryAllocation)
+                .where(
+                    InventoryAllocation.sales_order_id == order.id,
+                    InventoryAllocation.status == AllocationStatus.SHIPPED,
+                )
+            )
+        ).scalar_one()
+        if int(shipped):
+            raise ConflictError(
+                "Stock has already shipped on this order, so it cannot be "
+                "cancelled. Raise a credit note or return instead.",
+                code="ORDER_ALREADY_SHIPPED",
+                details={"shipped_allocations": int(shipped)},
+            )
+
+        allocations = list(
+            (
+                await session.execute(
+                    select(InventoryAllocation).where(
+                        InventoryAllocation.sales_order_id == order.id,
+                        InventoryAllocation.status.in_(
+                            (
+                                AllocationStatus.RESERVED,
+                                AllocationStatus.ALLOCATED,
+                                AllocationStatus.BACKORDERED,
+                            )
+                        ),
+                    )
+                )
+            ).scalars()
+        )
+
+        released = ZERO
+        now = datetime.now(UTC)
+        for allocation in allocations:
+            quantity = Decimal(allocation.quantity)
+            if allocation.warehouse_id is not None:
+                inv = (
+                    await session.execute(
+                        select(Inventory)
+                        .where(
+                            Inventory.warehouse_id == allocation.warehouse_id,
+                            Inventory.product_id == allocation.product_id,
+                        )
+                        .with_for_update()
+                    )
+                ).scalar_one_or_none()
+                if inv is not None:
+                    inv.quantity_reserved = max(
+                        ZERO, Decimal(inv.quantity_reserved) - quantity
+                    )
+                    released += quantity
+                allocation.status = AllocationStatus.RELEASED
+            else:
+                # A backorder never reserved anything, so there is nothing to
+                # give back — it is simply cancelled.
+                allocation.status = AllocationStatus.CANCELLED
+            allocation.released_at = now
+
+        for line in (
+            await session.execute(
+                select(SalesOrderLine).where(
+                    SalesOrderLine.sales_order_id == order.id
+                )
+            )
+        ).scalars():
+            line.quantity_allocated = ZERO
+            line.quantity_backordered = ZERO
+
+        order.status = SalesOrderStatus.CANCELLED
+        order.fully_allocated = False
+        order.has_backorder = False
+        order.allocated_at = None
+
+        # Cancel any schedule that has not already been invoiced.
+        for schedule in (
+            await session.execute(
+                select(BillingSchedule).where(
+                    BillingSchedule.sales_order_id == order.id,
+                    BillingSchedule.status.in_(
+                        (
+                            BillingScheduleStatus.SCHEDULED,
+                            BillingScheduleStatus.ACTIVE,
+                        )
+                    ),
+                )
+            )
+        ).scalars():
+            schedule.status = BillingScheduleStatus.CANCELLED
+
+        await session.flush()
+
+        for item_type in (
+            AttentionItemType.INVENTORY_SHORTAGE,
+            AttentionItemType.DELIVERY_SLIPPAGE,
+            AttentionItemType.ORDER_BLOCKED,
+        ):
+            await AttentionService.resolve(
+                session,
+                organization_id=order.organization_id,
+                source_type="sales_order",
+                source_id=order.id,
+                item_type=item_type,
+                note="Order was cancelled.",
+                actor=actor,
+            )
+
+        await AuditService.emit(
+            session,
+            EventType.ORDER_CANCELLED,
+            organization_id=order.organization_id,
+            entity_type="sales_order",
+            entity_id=order.id,
+            actor=actor,
+            payload={
+                "order_number": order.order_number,
+                "reason": reason,
+                "allocations_released": len(allocations),
+                "quantity_released": str(released),
+            },
+        )
+        return order

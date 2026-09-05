@@ -10,7 +10,7 @@ from typing import Any
 
 import pytest_asyncio
 
-from tests.conftest import Api, build_canonical_quote, login, signup
+from tests.conftest import Api, build_canonical_quote, login, page_items, signup
 
 
 @pytest_asyncio.fixture(loop_scope="session")
@@ -70,8 +70,8 @@ async def rival(client) -> dict[str, Any]:
 
 
 async def test_catalogs_are_completely_separate(seeded, rival) -> None:
-    ours = (await seeded["sales"].get("/products", expect=200)).json()
-    theirs = (await rival["sales"].get("/products", expect=200)).json()
+    ours = page_items((await seeded["sales"].get("/products", expect=200)).json())
+    theirs = page_items((await rival["sales"].get("/products", expect=200)).json())
 
     our_skus = {p["sku"] for p in ours}
     their_skus = {p["sku"] for p in theirs}
@@ -83,14 +83,16 @@ async def test_catalogs_are_completely_separate(seeded, rival) -> None:
 async def test_policies_are_separate(seeded, rival) -> None:
     ours = (await seeded["sales"].get("/policies", expect=200)).json()
     theirs = (await rival["sales"].get("/policies", expect=200)).json()
-    assert len(ours) == 6
-    assert theirs == []
+    # Seven seeded policies: four category ceilings, a margin floor, a
+    # discount signing authority and a payment-terms limit.
+    assert len(ours) == 7
+    assert theirs == [], "a new tenant inherits no policies"
 
 
 async def test_customers_and_deals_are_separate(seeded, rival) -> None:
     await build_canonical_quote(seeded)
-    ours = (await seeded["sales"].get("/deals", expect=200)).json()
-    theirs = (await rival["sales"].get("/deals", expect=200)).json()
+    ours = page_items((await seeded["sales"].get("/deals", expect=200)).json())
+    theirs = page_items((await rival["sales"].get("/deals", expect=200)).json())
     assert len(ours) == 1
     assert theirs == []
 
@@ -182,8 +184,8 @@ async def test_a_quote_line_cannot_reference_another_orgs_product(
 
 async def test_audit_trails_are_scoped_per_organization(seeded, rival) -> None:
     await build_canonical_quote(seeded)
-    ours = (await seeded["sales"].get("/audit/events", expect=200)).json()
-    theirs = (await rival["sales"].get("/audit/events", expect=200)).json()
+    ours = page_items((await seeded["sales"].get("/audit/events", expect=200)).json())
+    theirs = page_items((await rival["sales"].get("/audit/events", expect=200)).json())
     assert ours
     our_ids = {e["id"] for e in ours}
     their_ids = {e["id"] for e in theirs}
@@ -280,7 +282,7 @@ async def test_customer_only_sees_quotes_issued_to_their_organization(
 
 async def test_orders_are_scoped_per_organization(seeded, rival) -> None:
     intruder: Api = rival["sales"]
-    orders = (await intruder.get("/orders", expect=200)).json()
+    orders = page_items((await intruder.get("/orders", expect=200)).json())
     assert orders == []
     response = await intruder.get(
         "/orders/00000000-0000-0000-0000-000000000000"

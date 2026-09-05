@@ -69,6 +69,11 @@ class Product(UUIDPrimaryKeyMixin, OrgOwnedMixin, TimestampMixin, Base):
     #: Physical goods draw down warehouse inventory; services do not.
     is_stock_tracked: Mapped[bool] = mapped_column(nullable=False, default=False)
     is_active: Mapped[bool] = mapped_column(nullable=False, default=True)
+    #: PDF A6.2 — "Mark products as currently promoted so they rank higher in
+    #: suggestions", which is also what lets B5 render a promotion tag.
+    is_promoted: Mapped[bool] = mapped_column(
+        nullable=False, default=False, server_default=sa.false()
+    )
 
     @property
     def unit_margin(self) -> Decimal:

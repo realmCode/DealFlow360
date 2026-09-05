@@ -36,6 +36,7 @@ from app.enums import (
     AttentionItemType,
     DealStage,
     QuoteVersionStatus,
+    SalesOrderStatus,
     SEVERITY_RANK,
     Severity,
 )
@@ -45,11 +46,15 @@ from app.models.customer_profile import CustomerProfile
 from app.models.deal import Deal
 from app.models.quote import Quote
 from app.models.quote_version import QuoteVersion
+from app.models.sales_order import SalesOrder
 from app.models.user import User
 from app.services.audit_service import AttentionService
 from app.services.commercial_engine import ZERO, money, pct
 from app.services.policy_engine import _trim
+from app.services.settings_service import SettingsService
 
+#: Fallback only. The live value comes from `organization_settings`
+#: (PDF B9.1 requires the window to be configured, not compiled in).
 NO_RESPONSE_DAYS = 14
 
 CAPS = {
@@ -337,11 +342,18 @@ class DashboardService:
                     }
                 )
 
+            # PDF B9.1 — "inactive for more than a configured number of days".
+            # The window is per-organization rather than a module constant, so
+            # two tenants on one deployment can disagree about what stalled
+            # means for their sales cycle.
+            stalled_days = await SettingsService.stalled_deal_days(
+                session, organization_id
+            )
             if (
                 current_version.status is QuoteVersionStatus.SENT
                 and current_version.sent_at is not None
                 and current_version.sent_at
-                < datetime.now(UTC) - timedelta(days=NO_RESPONSE_DAYS)
+                < datetime.now(UTC) - timedelta(days=stalled_days)
             ):
                 score -= 10
                 signals.append(
@@ -351,11 +363,63 @@ class DashboardService:
                         "severity": Severity.MEDIUM,
                         "detail": (
                             f"Sent {current_version.sent_at.date().isoformat()} with "
-                            f"no reply for over {NO_RESPONSE_DAYS} days."
+                            f"no reply for over {stalled_days} days."
                         ),
                         "points": -10,
                     }
                 )
+
+            anomaly_items = [
+                i
+                for i in items
+                if i.type is AttentionItemType.DISCOUNT_ANOMALY
+            ]
+            if anomaly_items:
+                score -= 10
+                signals.append(
+                    {
+                        "code": "DISCOUNT_ANOMALY",
+                        "label": "Unusual discount",
+                        "severity": anomaly_items[0].severity,
+                        "detail": anomaly_items[0].reason,
+                        "points": -10,
+                    }
+                )
+
+        # PDF B9.3 — delivery promise slippage.
+        late_order = (
+            await session.execute(
+                select(SalesOrder)
+                .where(
+                    SalesOrder.deal_id == deal.id,
+                    SalesOrder.promised_delivery_date.is_not(None),
+                    SalesOrder.promised_delivery_date < datetime.now(UTC).date(),
+                    SalesOrder.fulfilled_at.is_(None),
+                    SalesOrder.status != SalesOrderStatus.CANCELLED,
+                )
+                .limit(1)
+            )
+        ).scalars().first()
+        if late_order is not None:
+            days_late = (
+                datetime.now(UTC).date() - late_order.promised_delivery_date
+            ).days
+            score -= 15
+            signals.append(
+                {
+                    "code": "DELIVERY_SLIPPAGE",
+                    "label": "Delivery promise missed",
+                    "severity": (
+                        Severity.HIGH if days_late > 7 else Severity.MEDIUM
+                    ),
+                    "detail": (
+                        f"Order {late_order.order_number} was promised "
+                        f"{late_order.promised_delivery_date.isoformat()} and is "
+                        f"{days_late} day(s) late with no fulfilment recorded."
+                    ),
+                    "points": -15,
+                }
+            )
 
         if not signals:
             signals.append(

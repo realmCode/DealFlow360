@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 
 import sqlalchemy as sa
@@ -105,6 +105,11 @@ class SalesOrder(UUIDPrimaryKeyMixin, OrgOwnedMixin, TimestampMixin, Base):
         sa.DateTime(timezone=True),
         nullable=False,
         server_default=sa.text("timezone('utc', now())"),
+    )
+    #: PDF B9.3 — "Delivery promise slippage indicators". Slippage is only
+    #: measurable against a commitment, so the promise has to be recorded.
+    promised_delivery_date: Mapped[date | None] = mapped_column(
+        sa.Date, nullable=True
     )
     fully_allocated: Mapped[bool] = mapped_column(nullable=False, default=False)
     has_backorder: Mapped[bool] = mapped_column(nullable=False, default=False)

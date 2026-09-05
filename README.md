@@ -6,8 +6,34 @@
 
 FastAPI · SQLAlchemy 2.0 async · Pydantic v2 · Alembic · PostgreSQL 16 · JWT
 
-**Status:** P0 complete and verified — 344 automated tests passing against real
-PostgreSQL, including the full canonical flow end to end.
+**Status:** Complete against the hackathon problem statement — **433 automated
+tests passing** against real PostgreSQL, including the full canonical flow end
+to end. 38 tables, 117 API operations.
+
+> **Full documentation lives in [`docs/`](docs/)** — 15 documents covering the
+> problem analysis, user ecosystem, journeys, architecture, data model, entity
+> lifecycles, requirement traceability, gap analysis, security audit, judge
+> strategy, API reference written from captured live payloads, and a frontend
+> integration guide. Start with
+> [`docs/REQUIREMENT_TRACEABILITY_MATRIX.md`](docs/REQUIREMENT_TRACEABILITY_MATRIX.md)
+> for coverage against the PDF, or
+> [`docs/FRONTEND_INTEGRATION_GUIDE.md`](docs/FRONTEND_INTEGRATION_GUIDE.md) to
+> build a client.
+
+### What was added after the initial P0 build
+
+| PDF module | Addition |
+|---|---|
+| **A7** Reporting | Six reports with Period / Team / Rep / Approval-Status / Product filters, plus CSV, XLSX and PDF export. `sales_teams` entity added so the Team filter has a subject |
+| **A5 / B7** Subscription lifecycle | Mid-cycle quantity and interval changes with real proration, cancellation, and `credit_notes` with partial refunds |
+| **B9** Deal health | Discount anomaly against each rep's own historical average, delivery-promise slippage, and acknowledge / nudge / escalate actions |
+| **B3** Quote builder | Order-level discount that compounds with the line tier — and is evaluated by policy, so it cannot bypass a per-line ceiling |
+| **B1 / B2** Lists | `GET /quotes` for the Quotations list and Kanban, plus `Page[T]` pagination, filtering and sorting across every list |
+| **A2** Catalog | Product variants now attach to quote lines and apply price/cost deltas; tier price lists resolve during pricing. Both were previously inert |
+| **A3 / B9** Configuration | `organization_settings` makes the approval-escalation threshold, risk weights, stalled-deal window and anomaly sensitivity per-tenant |
+| **A6 / B5** Upsell | Promoted products with a promotion tag, and dismissals that persist |
+| Differentiator | `POST /quote-versions/{id}/simulate` — score a hypothetical discount, see which approvers it would add, persist nothing |
+| Security | Auth rate limiting, pinned CORS, startup validators refusing the demo posture in production, enforced attention-item ownership |
 
 ---
 
@@ -1091,9 +1117,63 @@ Ambiguities in the spec, and what was chosen.
 `GET /audit/events` · `GET /audit/quotes/{id}/timeline`
 
 **P1**
-`POST /admin/product-variants` · `POST /admin/price-lists` ·
+`POST|GET|PATCH /admin/product-variants[/{id}]` ·
+`POST|GET|PATCH /admin/price-lists[/{id}]` ·
+`GET /products/{id}/variants` ·
 `POST|GET /billing/invoices` · `POST /billing/invoices/{id}/payments` ·
-`GET /quotes/{id}/recommendations`
+`POST /billing/invoices/{id}/void` ·
+`GET /quotes/{id}/recommendations` ·
+`POST /quotes/{id}/recommendations/{product_id}/dismiss`
+
+**Phase 8 — Lists, configuration and reporting**
+`GET /quotes` · `PATCH /quote-versions/{id}/discount` ·
+`POST /quotes/{id}/lose` · `POST /quote-versions/{id}/simulate` ·
+`GET|PATCH /admin/settings` ·
+`POST|GET|PATCH /admin/sales-teams[/{id}]` ·
+`POST|DELETE /admin/sales-teams/{id}/members[/{user_id}]` ·
+`GET|PATCH /admin/warehouses/{id}` ·
+`GET /reports/sales-performance` · `GET /reports/approval-status` ·
+`GET /reports/products` · `GET /reports/discounts` ·
+`GET /reports/pipeline` · `GET /reports/discount-anomalies` ·
+`GET /reports/{report}/export` · `GET /reports/export/formats`
+
+**Phase 9 — Subscription lifecycle and fulfilment**
+`POST /billing/subscriptions/{id}/change` ·
+`POST /billing/subscriptions/{id}/cancel` ·
+`GET /billing/credit-notes[/{id}]` ·
+`POST /billing/credit-notes/{id}/refund` ·
+`POST /billing/credit-notes/{id}/void` ·
+`PATCH /orders/{id}/promise` ·
+`POST /orders/{id}/fulfillments/{fid}/deliver` ·
+`POST /orders/{id}/cancel` ·
+`POST /dashboard/attention-items/{id}/acknowledge` ·
+`POST /dashboard/attention-items/{id}/nudge` ·
+`POST /dashboard/attention-items/{id}/escalate`
 
 **System**
 `GET /health` · `GET /docs` · `GET /redoc` · `GET /openapi.json`
+
+---
+
+## Appendix D — The five added tables
+
+33 → 38. All four migrations are additive, with server defaults on every new
+`NOT NULL` column so existing rows are safe.
+
+| Table | Why |
+|---|---|
+| `organization_settings` | PDF A3 requires a configurable approval chain and B9 a *configured* stalled-deal window. Both were process-global environment variables, which cannot differ per tenant. One row per organization, created lazily from the environment defaults so existing tenants behave exactly as before. |
+| `sales_teams` · `sales_team_members` | PDF A7.4 filters reports by "Sales Team / Rep". `deals.owner_user_id` gave Rep; Team had no entity. Membership is many-to-many because a rep can sit on a regional and a vertical team at once. |
+| `credit_notes` | PDF A5/B7 require cancellation with a partial refund or credit note. An issued invoice is a financial record, so the credit is a separate document rather than an edit to the original. |
+| `dismissed_recommendations` | PDF B5 gives the upsell panel a Dismiss button. Without persistence the suggestion reappears and the button looks broken. Scoped per version, because a revision is a fresh proposal. |
+
+## Appendix E — Test suite performance
+
+The suite was ~8x slower than necessary. Two fixes, both worth knowing if it
+regresses:
+
+1. **Connection pooling.** The engine forced `NullPool` under test, opening a fresh TCP connection and authentication handshake for **every statement** — 133 ms/query measured against Dockerised PostgreSQL versus 4.8 ms pooled. The workaround existed because asyncpg binds a connection to its creating event loop; setting `asyncio_default_test_loop_scope = session` in `pytest.ini` means there is only ever one loop, so pooling is safe. `DB_FORCE_NULLPOOL=true` restores the old behaviour.
+2. **Cleanup strategy.** The per-test fixture truncated all 38 tables unconditionally. `TRUNCATE` rewrites each relation file and syncs the data directory, benchmarking at a flat ~2.7s irrespective of table count. The fixture now finds dirty tables in one query and uses `DELETE` with foreign-key triggers suspended for the transaction.
+
+`test_auth.py` (18 tests): **101.4s → 16.2s**. Full suite: **~45 min projected
+→ 6.6 min** for 433 tests.

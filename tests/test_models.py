@@ -19,9 +19,16 @@ from app.models import Base, EXPECTED_TABLES
 from tests.conftest import db_session
 
 
-def test_exactly_thirty_three_tables_are_mapped() -> None:
-    assert len(EXPECTED_TABLES) == 33
-    assert len(set(EXPECTED_TABLES)) == 33
+#: 33 original tables plus five added for PDF modules A5/A6/A7:
+#: credit_notes, organization_settings, sales_teams, sales_team_members and
+#: dismissed_recommendations.
+EXPECTED_TABLE_COUNT = 38
+
+
+def test_the_expected_tables_match_the_mapped_metadata() -> None:
+    assert len(EXPECTED_TABLES) == EXPECTED_TABLE_COUNT
+    assert len(set(EXPECTED_TABLES)) == EXPECTED_TABLE_COUNT, "no duplicates"
+    # The real invariant: the declared inventory and the ORM cannot drift.
     assert set(Base.metadata.tables) == set(EXPECTED_TABLES)
 
 

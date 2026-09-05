@@ -7,7 +7,7 @@ from decimal import Decimal
 from sqlalchemy import select
 
 from app.models.audit_event import AuditEvent
-from tests.conftest import build_canonical_quote, db_session
+from tests.conftest import build_canonical_quote, db_session, page_items
 
 #: Events the canonical P0 flow must leave behind, in order.
 REQUIRED_SEQUENCE = (
@@ -98,7 +98,7 @@ async def _full_flow(seeded) -> dict:
 async def test_the_full_flow_leaves_every_required_event(seeded) -> None:
     await _full_flow(seeded)
     sales = seeded["sales"]
-    events = (await sales.get("/audit/events", params={"limit": 500}, expect=200)).json()
+    events = page_items((await sales.get("/audit/events", params={"limit": 200}, expect=200)).json())
     types = [e["event_type"] for e in events]
 
     for required in REQUIRED_SEQUENCE:
@@ -117,7 +117,7 @@ async def test_events_are_ordered_even_within_one_transaction(seeded) -> None:
     await sales.post(
         f"/quote-versions/{built['version_id']}/submit", json={}, expect=200
     )
-    events = (await sales.get("/audit/events", params={"limit": 500}, expect=200)).json()
+    events = page_items((await sales.get("/audit/events", params={"limit": 200}, expect=200)).json())
     submitted = next(e for e in events if e["event_type"] == "QUOTE_SUBMITTED")
     evaluated = next(e for e in events if e["event_type"] == "POLICY_EVALUATED")
     requested = next(e for e in events if e["event_type"] == "APPROVAL_REQUESTED")
@@ -127,7 +127,7 @@ async def test_events_are_ordered_even_within_one_transaction(seeded) -> None:
 async def test_every_event_records_the_actor(seeded) -> None:
     await _full_flow(seeded)
     sales = seeded["sales"]
-    events = (await sales.get("/audit/events", params={"limit": 500}, expect=200)).json()
+    events = page_items((await sales.get("/audit/events", params={"limit": 200}, expect=200)).json())
 
     actors: dict[str, set[str]] = {}
     for event in events:
@@ -345,7 +345,7 @@ async def test_login_and_signup_are_audited(seeded, client) -> None:
         organization_name="Audited Co",
     )
     api = await login(client, "audited@newco.dev")
-    events = (await api.get("/audit/events", expect=200)).json()
+    events = page_items((await api.get("/audit/events", expect=200)).json())
     types = {e["event_type"] for e in events}
     assert "USER_SIGNED_UP" in types
     assert "USER_LOGGED_IN" in types

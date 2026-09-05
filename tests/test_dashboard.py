@@ -4,7 +4,7 @@ from __future__ import annotations
 
 
 
-from tests.conftest import build_canonical_quote
+from tests.conftest import build_canonical_quote, page_items
 
 
 async def _approve_all(seeded, version_id: str) -> None:
@@ -103,7 +103,7 @@ async def test_full_approval_resolves_the_pending_item(seeded) -> None:
     )
     await _approve_all(seeded, built["version_id"])
 
-    open_items = (await sales.get("/dashboard/attention-items", expect=200)).json()
+    open_items = page_items((await sales.get("/dashboard/attention-items", expect=200)).json())
     assert [i for i in open_items if i["type"] == "PENDING_APPROVAL"] == []
 
     resolved = (
@@ -223,7 +223,7 @@ async def test_stale_approval_is_critical_and_blocks_the_order(seeded) -> None:
 
     stale = next(
         i
-        for i in (await sales.get("/dashboard/attention-items", expect=200)).json()
+        for i in page_items((await sales.get("/dashboard/attention-items", expect=200)).json())
         if i["type"] == "STALE_APPROVAL"
     )
     assert stale["severity"] == "CRITICAL"
@@ -265,7 +265,7 @@ async def test_reapproval_clears_the_stale_and_blocked_items(seeded) -> None:
     ).json()
     await _approve_all(seeded, counter["new_version_id"])
 
-    items = (await sales.get("/dashboard/attention-items", expect=200)).json()
+    items = page_items((await sales.get("/dashboard/attention-items", expect=200)).json())
     types = {i["type"] for i in items}
     assert "STALE_APPROVAL" not in types
     assert "ORDER_BLOCKED" not in types
@@ -321,16 +321,19 @@ async def test_severity_filter_narrows_the_queue(seeded) -> None:
     assert low == []
 
 
-async def test_items_can_be_resolved_manually(seeded) -> None:
+async def test_items_can_be_resolved_by_their_owner(seeded) -> None:
     built = await build_canonical_quote(seeded)
     sales = seeded["sales"]
+    manager = seeded["manager"]
     await sales.post(
         f"/quote-versions/{built['version_id']}/submit", json={}, expect=200
     )
-    items = (await sales.get("/dashboard/attention-items", expect=200)).json()
+    items = page_items((await sales.get("/dashboard/attention-items", expect=200)).json())
+    target = next(i for i in items if i["owner_role"] == "MANAGER")
+
     resolved = (
-        await sales.post(
-            f"/dashboard/attention-items/{items[0]['id']}/resolve",
+        await manager.post(
+            f"/dashboard/attention-items/{target['id']}/resolve",
             json={"resolution_note": "Handled over the phone."},
             expect=200,
         )
@@ -338,8 +341,41 @@ async def test_items_can_be_resolved_manually(seeded) -> None:
     assert resolved["status"] == "RESOLVED"
     assert resolved["resolved_at"] is not None
 
-    remaining = (await sales.get("/dashboard/attention-items", expect=200)).json()
-    assert items[0]["id"] not in {i["id"] for i in remaining}
+    remaining = page_items((await sales.get("/dashboard/attention-items", expect=200)).json())
+    assert target["id"] not in {i["id"] for i in remaining}
+
+
+async def test_a_non_owner_cannot_resolve_someone_elses_item(seeded) -> None:
+    """Ownership is enforced, not merely recorded.
+
+    Otherwise the rep whose own quote triggered a governance alert could clear
+    it from the manager's queue — emptying the early-warning system for the
+    person it exists to warn.
+    """
+    built = await build_canonical_quote(seeded)
+    sales = seeded["sales"]
+    await sales.post(
+        f"/quote-versions/{built['version_id']}/submit", json={}, expect=200
+    )
+    items = page_items((await sales.get("/dashboard/attention-items", expect=200)).json())
+    target = next(i for i in items if i["owner_role"] == "MANAGER")
+
+    refused = await sales.post(
+        f"/dashboard/attention-items/{target['id']}/resolve",
+        json={"resolution_note": "Not my call to make."},
+    )
+    assert refused.status_code == 403
+    body = refused.json()["error"]
+    assert body["code"] == "NOT_ITEM_OWNER"
+    assert body["details"]["owner_role"] == "MANAGER"
+    assert body["details"]["your_role"] == "SALES"
+
+    # ADMIN retains break-glass authority.
+    await seeded["admin"].post(
+        f"/dashboard/attention-items/{target['id']}/resolve",
+        json={"resolution_note": "Cleared by admin."},
+        expect=200,
+    )
 
 
 async def test_editing_a_draft_does_not_spam_the_queue(seeded) -> None:
@@ -356,7 +392,7 @@ async def test_editing_a_draft_does_not_spam_the_queue(seeded) -> None:
         await sales.post(
             f"/quote-versions/{built['version_id']}/calculate", expect=200
         )
-    items = (await sales.get("/dashboard/attention-items", expect=200)).json()
+    items = page_items((await sales.get("/dashboard/attention-items", expect=200)).json())
     assert items == []
 
 

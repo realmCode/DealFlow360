@@ -89,13 +89,16 @@ async def main() -> int:
         )
         present = {r[0] for r in rows}
         missing = [t for t in EXPECTED_TABLES if t not in present]
-        print(f"\n[tables]   expected 33, found {len(present & set(EXPECTED_TABLES))}")
+        print(
+            f"\n[tables]   expected {len(EXPECTED_TABLES)}, "
+            f"found {len(present & set(EXPECTED_TABLES))}"
+        )
         if missing:
             failures.append(f"missing tables: {missing}")
             for t in missing:
                 print(f"  ✗ {t}")
         else:
-            print("  ✓ all 33 business tables present")
+            print(f"  ✓ all {len(EXPECTED_TABLES)} business tables present")
         extra = present - set(EXPECTED_TABLES) - {"alembic_version"}
         if extra:
             print(f"  ! unexpected tables: {sorted(extra)}")

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 
 from pydantic import Field
@@ -16,7 +16,7 @@ from app.enums import (
     RecurringInterval,
     SalesOrderStatus,
 )
-from app.schemas.common import ReadModel, TimestampedRead
+from app.schemas.common import ApiModel, ReadModel, TimestampedRead
 
 
 class SalesOrderLineRead(ReadModel):
@@ -73,6 +73,55 @@ class FulfillmentRead(ReadModel):
     delivered_at: datetime | None = None
 
 
+class SalesOrderSummary(ReadModel):
+    """List row. Excludes lines, allocations and fulfillments on purpose.
+
+    The list endpoint previously loaded the whole order graph for every row,
+    which is four extra queries per order for data a list screen does not
+    display.
+    """
+
+    id: uuid.UUID
+    order_number: str
+    deal_id: uuid.UUID
+    quote_id: uuid.UUID
+    customer_profile_id: uuid.UUID
+    customer_name: str | None = None
+    status: SalesOrderStatus
+    currency: str
+    payment_terms: PaymentTerms
+    subtotal: Decimal
+    tax_amount: Decimal
+    total_amount: Decimal
+    margin: Decimal
+    margin_pct: Decimal
+    one_time_amount: Decimal
+    recurring_amount: Decimal
+    fully_allocated: bool
+    has_backorder: bool
+    promised_delivery_date: date | None = None
+    #: PDF B9.3 — promised date passed with the order still unfulfilled.
+    is_delivery_late: bool = False
+    days_late: int = 0
+    confirmed_at: datetime
+    allocated_at: datetime | None = None
+    fulfilled_at: datetime | None = None
+
+
+class PromiseUpdate(ApiModel):
+    promised_delivery_date: date
+
+
+class DeliveryConfirmRequest(ApiModel):
+    #: Defaults to now. Accepts a past timestamp for back-dated confirmation.
+    delivered_at: datetime | None = None
+    note: str | None = Field(default=None, max_length=1000)
+
+
+class OrderCancelRequest(ApiModel):
+    reason: str = Field(min_length=1, max_length=2000)
+
+
 class SalesOrderRead(TimestampedRead):
     order_number: str
     deal_id: uuid.UUID
@@ -102,6 +151,9 @@ class SalesOrderRead(TimestampedRead):
     has_backorder: bool
     allocated_at: datetime | None = None
     fulfilled_at: datetime | None = None
+    promised_delivery_date: date | None = None
+    is_delivery_late: bool = False
+    days_late: int = 0
 
     lines: list[SalesOrderLineRead] = Field(default_factory=list)
     allocations: list[AllocationRead] = Field(default_factory=list)

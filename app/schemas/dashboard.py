@@ -37,6 +37,13 @@ class AttentionItemRead(ReadModel):
     detail: dict[str, Any] = Field(default_factory=dict)
     created_at: datetime
     resolved_at: datetime | None = None
+    #: PDF B9 nudge / escalation state.
+    acknowledged_at: datetime | None = None
+    acknowledged_by_user_id: uuid.UUID | None = None
+    nudge_count: int = 0
+    last_nudged_at: datetime | None = None
+    escalated_at: datetime | None = None
+    escalation_note: str | None = None
 
 
 class AttentionItemGroup(ReadModel):
@@ -110,3 +117,30 @@ class AuditEventRead(ReadModel):
 
 class AttentionItemResolve(ApiModel):
     resolution_note: str | None = Field(default=None, max_length=1000)
+
+
+class AttentionItemAcknowledge(ApiModel):
+    """PDF B9 — "I have seen this and I am on it", short of resolving it."""
+
+    note: str | None = Field(default=None, max_length=1000)
+
+
+class AttentionItemNudge(ApiModel):
+    """PDF B9 — "An automated nudge ... can be triggered from an alert"."""
+
+    note: str | None = Field(default=None, max_length=1000)
+
+
+class AttentionItemEscalate(ApiModel):
+    """PDF B9 — escalation raises severity and may reassign the owner."""
+
+    note: str = Field(min_length=1, max_length=1000)
+    #: Omit to leave ownership unchanged and only raise severity.
+    owner_role: RoleCode | None = None
+
+
+class NudgeResponse(ReadModel):
+    item: AttentionItemRead
+    message: str
+    notified_role: RoleCode
+    nudge_count: int

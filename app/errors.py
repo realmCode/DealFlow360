@@ -133,3 +133,19 @@ class IdempotencyConflictError(ConflictError):
 class InsufficientInventoryError(ConflictError):
     code = "INSUFFICIENT_INVENTORY"
     default_message = "Not enough stock available to satisfy the request."
+
+
+# --------------------------------------------------------------------- 429
+class RateLimitedError(DealFlowError):
+    status_code = status.HTTP_429_TOO_MANY_REQUESTS
+    code = "RATE_LIMITED"
+    default_message = "Too many requests. Please wait before trying again."
+
+    def __init__(
+        self, message: str | None = None, *, retry_after: int = 60, **kw: Any
+    ) -> None:
+        details = dict(kw.pop("details", None) or {})
+        details.setdefault("retry_after_seconds", retry_after)
+        super().__init__(message, details=details, **kw)
+        # Standard header so a client can back off correctly without parsing prose.
+        self.headers = {"Retry-After": str(retry_after)}

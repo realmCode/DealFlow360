@@ -35,6 +35,10 @@ ATTACH_CATEGORIES = (ProductCategory.SERVICE, ProductCategory.SUBSCRIPTION)
 VOLUME_THRESHOLDS = (Decimal("10"), Decimal("25"), Decimal("50"), Decimal("100"))
 
 
+#: Ordering weight for the panel. Promoted products sort ahead of all of these.
+_CONFIDENCE_RANK = {"HIGH": 0, "MEDIUM": 1, "LOW": 2}
+
+
 @dataclass(slots=True)
 class Recommendation:
     kind: str
@@ -47,6 +51,8 @@ class Recommendation:
     reason: str
     impact: str
     confidence: str
+    #: PDF B5 — drives the promotion tag in the upsell panel.
+    is_promoted: bool = False
     detail: dict[str, Any] = field(default_factory=dict)
 
     def as_dict(self) -> dict[str, Any]:
@@ -61,6 +67,7 @@ class Recommendation:
             "reason": self.reason,
             "impact": self.impact,
             "confidence": self.confidence,
+            "is_promoted": self.is_promoted,
             "detail": self.detail,
         }
 
@@ -70,6 +77,9 @@ class RecommendationEngine:
     async def for_version(
         cls, session: AsyncSession, version: QuoteVersion
     ) -> list[dict[str, Any]]:
+        from app.models.dismissed_recommendation import DismissedRecommendation
+        from app.services.settings_service import SettingsService
+
         lines = await CommercialEngine.load_lines(session, version.id)
         catalog = list(
             (
@@ -81,6 +91,38 @@ class RecommendationEngine:
                 )
             ).scalars()
         )
+
+        # PDF A6.3 — "Set minimum margin thresholds so only healthy margin
+        # suggestions surface". Suggesting a thin-margin product to fix a
+        # margin problem would be actively counterproductive.
+        org_settings = await SettingsService.for_org(
+            session, version.organization_id
+        )
+        min_margin = Decimal(org_settings.recommendation_min_margin_pct)
+        if min_margin > ZERO:
+            catalog = [
+                p
+                for p in catalog
+                if safe_pct(
+                    Decimal(p.list_price) - Decimal(p.internal_cost),
+                    Decimal(p.list_price),
+                )
+                >= min_margin
+            ]
+
+        # PDF B5 — a dismissed suggestion must stay dismissed, otherwise the
+        # Dismiss button appears broken and the panel loses credibility.
+        dismissed = set(
+            (
+                await session.execute(
+                    select(DismissedRecommendation.product_id).where(
+                        DismissedRecommendation.quote_version_id == version.id
+                    )
+                )
+            ).scalars()
+        )
+        catalog = [p for p in catalog if p.id not in dismissed]
+
         on_quote = {line.product_id for line in lines}
         by_category: dict[ProductCategory, list[QuoteLine]] = {}
         for line in lines:
@@ -172,16 +214,24 @@ class RecommendationEngine:
                 )
             )
 
+        # PDF A6.2 — promoted products "rank higher in suggestions".
+        results.sort(key=lambda r: (not r.is_promoted, _CONFIDENCE_RANK.get(r.confidence, 3)))
         return [r.as_dict() for r in results]
 
     @staticmethod
     def _best_margin_product(candidates: list[Product]) -> Product | None:
+        """Highest unit-margin candidate, with promoted products preferred.
+
+        PDF A6.2 asks promoted products to rank higher; margin ratio remains
+        the tie-break so a promotion cannot surface a loss-making item.
+        """
         priced = [p for p in candidates if Decimal(p.list_price) > ZERO]
         if not priced:
             return None
         return max(
             priced,
             key=lambda p: (
+                bool(p.is_promoted),
                 (Decimal(p.list_price) - Decimal(p.internal_cost))
                 / Decimal(p.list_price),
                 Decimal(p.list_price),
@@ -219,9 +269,11 @@ class RecommendationEngine:
                 f"({money(calc.line_margin)} gross profit)."
             ),
             confidence=confidence,
+            is_promoted=bool(product.is_promoted),
             detail={
                 "category": product.category.value,
                 "sku": product.sku,
                 "unit_list_price": str(product.list_price),
+                "is_promoted": bool(product.is_promoted),
             },
         )

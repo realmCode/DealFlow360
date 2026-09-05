@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, status
+from fastapi import APIRouter, Query, status
 from sqlalchemy import select
 
 from app.dependencies import AdminUser, DbSession
@@ -18,18 +18,31 @@ from app.schemas.inventory import (
     InventoryUpsert,
     WarehouseCreate,
     WarehouseRead,
+    WarehouseUpdate,
 )
 from app.schemas.policy import PolicyCreate, PolicyRead, PolicyUpdate
 from app.schemas.product import (
     PriceListCreate,
     PriceListRead,
+    PriceListUpdate,
     ProductCreate,
     ProductRead,
     ProductUpdate,
     ProductVariantCreate,
     ProductVariantRead,
+    ProductVariantUpdate,
+)
+from app.schemas.reporting import (
+    OrganizationSettingsRead,
+    OrganizationSettingsUpdate,
+    SalesTeamCreate,
+    SalesTeamMemberAdd,
+    SalesTeamRead,
+    SalesTeamUpdate,
 )
 from app.services.inventory_service import InventoryService
+from app.services.sales_team_service import SalesTeamService
+from app.services.settings_service import SettingsService
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -273,6 +286,266 @@ async def create_price_list(
     await db.flush()
     await db.commit()
     return PriceListRead.model_validate(price_list)
+
+
+# ------------------------------------------------------- variants (reads)
+@router.get(
+    "/product-variants",
+    response_model=list[ProductVariantRead],
+    summary="List product variants",
+)
+async def list_variants(
+    admin: AdminUser,
+    db: DbSession,
+    product_id: uuid.UUID | None = Query(default=None),
+    include_inactive: bool = Query(default=False),
+) -> list[ProductVariantRead]:
+    """Without this, an admin could create variants and never see them again."""
+    stmt = select(ProductVariant).where(
+        ProductVariant.organization_id == admin.organization_id
+    )
+    if product_id is not None:
+        stmt = stmt.where(ProductVariant.product_id == product_id)
+    if not include_inactive:
+        stmt = stmt.where(ProductVariant.is_active.is_(True))
+    rows = (await db.execute(stmt.order_by(ProductVariant.sku))).scalars()
+    return [ProductVariantRead.model_validate(v) for v in rows]
+
+
+@router.patch(
+    "/product-variants/{variant_id}",
+    response_model=ProductVariantRead,
+    summary="Update a product variant",
+)
+async def update_variant(
+    variant_id: uuid.UUID,
+    payload: ProductVariantUpdate,
+    admin: AdminUser,
+    db: DbSession,
+) -> ProductVariantRead:
+    variant = await db.get(ProductVariant, variant_id)
+    if variant is None or variant.organization_id != admin.organization_id:
+        raise NotFoundError("Product variant not found.")
+    for key, value in payload.model_dump(exclude_unset=True).items():
+        if value is not None:
+            setattr(variant, key, value)
+    await db.flush()
+    await db.commit()
+    return ProductVariantRead.model_validate(variant)
+
+
+# ----------------------------------------------------- price lists (reads)
+@router.get(
+    "/price-lists",
+    response_model=list[PriceListRead],
+    summary="List tier price lists",
+)
+async def list_price_lists(
+    admin: AdminUser,
+    db: DbSession,
+    include_inactive: bool = Query(default=False),
+) -> list[PriceListRead]:
+    stmt = select(PriceList).where(
+        PriceList.organization_id == admin.organization_id
+    )
+    if not include_inactive:
+        stmt = stmt.where(PriceList.is_active.is_(True))
+    rows = (await db.execute(stmt.order_by(PriceList.code))).scalars()
+    return [PriceListRead.model_validate(p) for p in rows]
+
+
+@router.patch(
+    "/price-lists/{price_list_id}",
+    response_model=PriceListRead,
+    summary="Update a tier price list",
+)
+async def update_price_list(
+    price_list_id: uuid.UUID,
+    payload: PriceListUpdate,
+    admin: AdminUser,
+    db: DbSession,
+) -> PriceListRead:
+    price_list = await db.get(PriceList, price_list_id)
+    if price_list is None or price_list.organization_id != admin.organization_id:
+        raise NotFoundError("Price list not found.")
+    for key, value in payload.model_dump(exclude_unset=True).items():
+        if value is not None:
+            setattr(price_list, key, value)
+    await db.flush()
+    await db.commit()
+    return PriceListRead.model_validate(price_list)
+
+
+# ------------------------------------------------------ warehouses (edit)
+@router.get(
+    "/warehouses/{warehouse_id}",
+    response_model=WarehouseRead,
+    summary="Get one warehouse",
+)
+async def get_warehouse(
+    warehouse_id: uuid.UUID, admin: AdminUser, db: DbSession
+) -> WarehouseRead:
+    warehouse = await db.get(Warehouse, warehouse_id)
+    if warehouse is None or warehouse.organization_id != admin.organization_id:
+        raise NotFoundError("Warehouse not found.")
+    return WarehouseRead.model_validate(warehouse)
+
+
+@router.patch(
+    "/warehouses/{warehouse_id}",
+    response_model=WarehouseRead,
+    summary="Update a warehouse (priority and shipping cost drive the split)",
+)
+async def update_warehouse(
+    warehouse_id: uuid.UUID,
+    payload: WarehouseUpdate,
+    admin: AdminUser,
+    db: DbSession,
+) -> WarehouseRead:
+    """A warehouse could previously be created but never edited, so a wrong
+    shipping cost or priority — both of which drive the allocation split —
+    was permanent."""
+    warehouse = await db.get(Warehouse, warehouse_id)
+    if warehouse is None or warehouse.organization_id != admin.organization_id:
+        raise NotFoundError("Warehouse not found.")
+    for key, value in payload.model_dump(exclude_unset=True).items():
+        if value is not None:
+            setattr(warehouse, key, value)
+    await db.flush()
+    await db.commit()
+    return WarehouseRead.model_validate(warehouse)
+
+
+# -------------------------------------------------------------- settings
+@router.get(
+    "/settings",
+    response_model=OrganizationSettingsRead,
+    summary="Governance settings for your organization",
+)
+async def get_settings(admin: AdminUser, db: DbSession) -> OrganizationSettingsRead:
+    """PDF A3/B9 — the approval chain and stalled-deal window are per-tenant."""
+    row = await SettingsService.for_org(db, admin.organization_id)
+    await db.commit()
+    return OrganizationSettingsRead.model_validate(row)
+
+
+@router.patch(
+    "/settings",
+    response_model=OrganizationSettingsRead,
+    summary="Update governance thresholds and risk weights",
+)
+async def update_settings(
+    payload: OrganizationSettingsUpdate, admin: AdminUser, db: DbSession
+) -> OrganizationSettingsRead:
+    row = await SettingsService.for_org(db, admin.organization_id)
+    for key, value in payload.model_dump(exclude_unset=True).items():
+        if value is not None:
+            setattr(row, key, value)
+    await db.flush()
+    await db.commit()
+    return OrganizationSettingsRead.model_validate(row)
+
+
+# ----------------------------------------------------------- sales teams
+@router.post(
+    "/sales-teams",
+    response_model=SalesTeamRead,
+    status_code=status.HTTP_201_CREATED,
+    summary="Create a sales team (enables the Sales Team report filter)",
+)
+async def create_sales_team(
+    payload: SalesTeamCreate, admin: AdminUser, db: DbSession
+) -> SalesTeamRead:
+    team = await SalesTeamService.create(
+        db,
+        organization_id=admin.organization_id,
+        code=payload.code,
+        name=payload.name,
+        description=payload.description,
+        manager_user_id=payload.manager_user_id,
+        region=payload.region,
+        member_user_ids=payload.member_user_ids,
+    )
+    await db.commit()
+    return SalesTeamRead.model_validate(await SalesTeamService.to_read(db, team))
+
+
+@router.get(
+    "/sales-teams",
+    response_model=list[SalesTeamRead],
+    summary="List sales teams and their members",
+)
+async def list_sales_teams(
+    admin: AdminUser,
+    db: DbSession,
+    include_inactive: bool = Query(default=False),
+) -> list[SalesTeamRead]:
+    teams = await SalesTeamService.list_teams(
+        db, admin.organization_id, include_inactive=include_inactive
+    )
+    return [
+        SalesTeamRead.model_validate(await SalesTeamService.to_read(db, t))
+        for t in teams
+    ]
+
+
+@router.patch(
+    "/sales-teams/{team_id}",
+    response_model=SalesTeamRead,
+    summary="Update a sales team",
+)
+async def update_sales_team(
+    team_id: uuid.UUID,
+    payload: SalesTeamUpdate,
+    admin: AdminUser,
+    db: DbSession,
+) -> SalesTeamRead:
+    team = await SalesTeamService.get(db, team_id, admin.organization_id)
+    for key, value in payload.model_dump(exclude_unset=True).items():
+        if value is not None:
+            setattr(team, key, value)
+    await db.flush()
+    await db.commit()
+    return SalesTeamRead.model_validate(await SalesTeamService.to_read(db, team))
+
+
+@router.post(
+    "/sales-teams/{team_id}/members",
+    response_model=SalesTeamRead,
+    summary="Add members to a sales team",
+)
+async def add_sales_team_members(
+    team_id: uuid.UUID,
+    payload: SalesTeamMemberAdd,
+    admin: AdminUser,
+    db: DbSession,
+) -> SalesTeamRead:
+    team = await SalesTeamService.get(db, team_id, admin.organization_id)
+    await SalesTeamService.add_members(
+        db,
+        team=team,
+        user_ids=payload.user_ids,
+        organization_id=admin.organization_id,
+    )
+    await db.commit()
+    return SalesTeamRead.model_validate(await SalesTeamService.to_read(db, team))
+
+
+@router.delete(
+    "/sales-teams/{team_id}/members/{user_id}",
+    response_model=SalesTeamRead,
+    summary="Remove a member from a sales team",
+)
+async def remove_sales_team_member(
+    team_id: uuid.UUID,
+    user_id: uuid.UUID,
+    admin: AdminUser,
+    db: DbSession,
+) -> SalesTeamRead:
+    team = await SalesTeamService.get(db, team_id, admin.organization_id)
+    await SalesTeamService.remove_member(db, team=team, user_id=user_id)
+    await db.commit()
+    return SalesTeamRead.model_validate(await SalesTeamService.to_read(db, team))
 
 
 # ---------------------------------------------------------------------- seed

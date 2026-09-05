@@ -29,6 +29,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.enums import (
     AttentionItemType,
     BillingType,
+    DealStage,
     NegotiationThreadStatus,
     QuoteStatus,
     QuoteVersionSource,
@@ -47,7 +48,7 @@ from app.events import EventType
 from app.models.customer_profile import CustomerProfile
 from app.models.deal import Deal
 from app.models.negotiation_thread import NegotiationThread
-from app.models.product import Product
+from app.models.product import PriceList, Product, ProductVariant
 from app.models.quote import Quote
 from app.models.quote_line import QuoteLine
 from app.models.quote_version import QuoteVersion
@@ -240,6 +241,7 @@ class QuoteService:
         title: str,
         payment_terms: Any | None = None,
         valid_until: Any | None = None,
+        order_discount_pct: Decimal | None = None,
         lines: Sequence[Any] = (),
     ) -> tuple[Quote, QuoteVersion]:
         profile = await session.get(CustomerProfile, deal.customer_profile_id)
@@ -270,6 +272,7 @@ class QuoteService:
             currency=profile.currency,
             payment_terms=payment_terms or profile.payment_terms,
             valid_until=valid_until,
+            order_discount_pct=order_discount_pct or ZERO,
         )
         session.add(version)
         await session.flush()
@@ -334,6 +337,12 @@ class QuoteService:
             assert quote is not None
             profile = await cls.profile_for_quote(session, quote)
 
+        variant = await cls._resolve_variant(
+            session,
+            variant_id=getattr(payload, "product_variant_id", None),
+            product=product,
+        )
+
         if line_number is None:
             current_max = (
                 await session.execute(
@@ -351,20 +360,36 @@ class QuoteService:
         if product.billing_type is BillingType.ONE_TIME:
             recurring_periods = 1
 
+        # Pricing precedence: an explicit override, then the customer's tier
+        # price list, then the catalog price. The variant delta applies on top
+        # of whichever base wins.
+        base_price = await cls._resolve_base_price(
+            session, product=product, profile=profile, payload=payload
+        )
+        unit_list_price = base_price + (
+            Decimal(variant.price_delta) if variant else ZERO
+        )
+        unit_cost = Decimal(product.internal_cost) + (
+            Decimal(variant.cost_delta) if variant else ZERO
+        )
+
+        description = getattr(payload, "description", None) or (
+            f"{product.name} — {variant.name}" if variant else product.name
+        )
+
         line = QuoteLine(
             organization_id=version.organization_id,
             quote_version_id=version.id,
             product_id=product.id,
+            product_variant_id=variant.id if variant else None,
             line_number=line_number,
-            description=getattr(payload, "description", None) or product.name,
+            description=description,
             notes=getattr(payload, "notes", None),
             category=product.category,
             quantity=Decimal(payload.quantity),
-            unit_list_price=Decimal(
-                getattr(payload, "unit_list_price", None) or product.list_price
-            ),
+            unit_list_price=max(ZERO, unit_list_price),
             # Cost is *never* client-supplied — it is copied from the catalog.
-            unit_cost=Decimal(product.internal_cost),
+            unit_cost=max(ZERO, unit_cost),
             discount_pct=Decimal(getattr(payload, "discount_pct", None) or ZERO),
             tax_rate_pct=cls._resolve_tax_rate(product, profile),
             billing_type=product.billing_type,
@@ -372,13 +397,99 @@ class QuoteService:
             recurring_periods=recurring_periods,
             is_stock_tracked=product.is_stock_tracked,
         )
-        CommercialEngine.apply_to_line(line)
+        CommercialEngine.apply_to_line(
+            line, order_discount_pct=Decimal(version.order_discount_pct or ZERO)
+        )
         session.add(line)
         await session.flush()
 
         if recalculate:
             await cls.recalculate(session, version, profile=profile)
         return line
+
+    @staticmethod
+    async def _resolve_variant(
+        session: AsyncSession,
+        *,
+        variant_id: uuid.UUID | None,
+        product: Product,
+    ) -> ProductVariant | None:
+        """Validate that a requested variant belongs to this product and tenant."""
+        if variant_id is None:
+            return None
+        variant = await session.get(ProductVariant, variant_id)
+        if (
+            variant is None
+            or variant.organization_id != product.organization_id
+            or not variant.is_active
+        ):
+            raise NotFoundError(
+                "Product variant not found in your catalog.",
+                details={"product_variant_id": str(variant_id)},
+            )
+        if variant.product_id != product.id:
+            raise BusinessRuleError(
+                "That variant belongs to a different product.",
+                code="VARIANT_PRODUCT_MISMATCH",
+                details={
+                    "product_variant_id": str(variant_id),
+                    "expected_product_id": str(variant.product_id),
+                    "requested_product_id": str(product.id),
+                },
+            )
+        return variant
+
+    @staticmethod
+    async def _resolve_base_price(
+        session: AsyncSession,
+        *,
+        product: Product,
+        profile: CustomerProfile,
+        payload: Any,
+    ) -> Decimal:
+        """Resolve the unit list price, honouring tier price lists (PDF A2.3).
+
+        ``price_lists.rules`` was previously written by the admin endpoint and
+        never read, so tier pricing had no effect on a quote. An explicit
+        ``unit_list_price`` on the payload still wins, because a rep overriding
+        the price deliberately should not be silently overruled by a list.
+        """
+        override = getattr(payload, "unit_list_price", None)
+        if override is not None:
+            return Decimal(override)
+
+        today = datetime.now(UTC).date()
+        candidates = (
+            await session.execute(
+                select(PriceList).where(
+                    PriceList.organization_id == product.organization_id,
+                    PriceList.is_active.is_(True),
+                    PriceList.tier == profile.tier,
+                )
+            )
+        ).scalars()
+
+        for price_list in candidates:
+            if price_list.valid_from and price_list.valid_from > today:
+                continue
+            if price_list.valid_to and price_list.valid_to < today:
+                continue
+            for rule in price_list.rules or []:
+                if not isinstance(rule, dict):
+                    continue
+                if str(rule.get("product_id")) != str(product.id):
+                    continue
+                unit_price = rule.get("unit_price")
+                if unit_price is None:
+                    continue
+                try:
+                    return Decimal(str(unit_price))
+                except (ArithmeticError, ValueError):
+                    # A malformed rule must not break quoting; fall through to
+                    # the catalog price rather than raising on a config typo.
+                    continue
+
+        return Decimal(product.list_price)
 
     @staticmethod
     def _resolve_tax_rate(product: Product, profile: CustomerProfile) -> Decimal:
@@ -422,7 +533,9 @@ class QuoteService:
                 )
             line.recurring_periods = int(data["recurring_periods"])
 
-        CommercialEngine.apply_to_line(line)
+        CommercialEngine.apply_to_line(
+            line, order_discount_pct=Decimal(version.order_discount_pct or ZERO)
+        )
         await session.flush()
         if recalculate:
             await cls.recalculate(session, version)
@@ -626,6 +739,93 @@ class QuoteService:
         )
         return thread
 
+    # ---------------------------------------------------------------- lose
+    @classmethod
+    async def lose(
+        cls,
+        session: AsyncSession,
+        *,
+        quote_id: uuid.UUID,
+        actor: User,
+        reason: str,
+    ) -> Quote:
+        """Mark a quote lost and close its deal.
+
+        Previously unreachable: ``QuoteStatus.LOST`` and
+        ``DealStage.CLOSED_LOST`` both existed in the enums with no code path
+        setting them, so the pipeline could not represent a dead deal and win
+        rate was uncomputable.
+        """
+        quote = await cls.get_quote(session, quote_id, actor.organization_id)
+
+        if quote.status is QuoteStatus.CONFIRMED:
+            raise ConflictError(
+                "A confirmed quote cannot be marked lost; it already became an "
+                "order.",
+                code="QUOTE_ALREADY_CONFIRMED",
+                details={"quote_number": quote.quote_number},
+            )
+        if quote.status is QuoteStatus.LOST:
+            raise ConflictError(
+                "This quote is already marked lost.",
+                code="QUOTE_ALREADY_LOST",
+                details={"quote_number": quote.quote_number},
+            )
+
+        quote.status = QuoteStatus.LOST
+
+        deal = await session.get(Deal, quote.deal_id)
+        # Only close the deal when no sibling quote is still live — a deal can
+        # carry several quotes and losing one does not end the opportunity.
+        if deal is not None:
+            live = (
+                await session.execute(
+                    select(func.count())
+                    .select_from(Quote)
+                    .where(
+                        Quote.deal_id == deal.id,
+                        Quote.id != quote.id,
+                        Quote.status.in_((QuoteStatus.OPEN, QuoteStatus.CONFIRMED)),
+                    )
+                )
+            ).scalar_one()
+            if not live:
+                deal.stage = DealStage.CLOSED_LOST
+
+        # Nobody can act on a problem in a dead quote.
+        for item_type in (
+            AttentionItemType.CUSTOMER_RESPONSE_REQUIRED,
+            AttentionItemType.PENDING_APPROVAL,
+            AttentionItemType.STALE_APPROVAL,
+            AttentionItemType.MARGIN_VIOLATION,
+            AttentionItemType.DISCOUNT_ANOMALY,
+        ):
+            await AttentionService.resolve(
+                session,
+                organization_id=quote.organization_id,
+                source_type="quote",
+                source_id=quote.id,
+                item_type=item_type,
+                note="Quote was marked lost.",
+                actor=actor,
+            )
+
+        await session.flush()
+        await AuditService.emit(
+            session,
+            EventType.QUOTE_LOST,
+            organization_id=quote.organization_id,
+            entity_type="quote",
+            entity_id=quote.id,
+            actor=actor,
+            payload={
+                "quote_number": quote.quote_number,
+                "reason": reason,
+                "deal_stage": deal.stage.value if deal else None,
+            },
+        )
+        return quote
+
     # ------------------------------------------------------------ revision
     @classmethod
     async def create_revision(
@@ -640,6 +840,7 @@ class QuoteService:
         add_lines: Sequence[Any] = (),
         remove_line_ids: Sequence[uuid.UUID] = (),
         payment_terms: Any | None = None,
+        order_discount_pct: Decimal | None = None,
         submit: bool = True,
     ) -> tuple[QuoteVersion, FabricOutcome]:
         """Create the next version, supersede this one, run the Decision Fabric.
@@ -676,6 +877,13 @@ class QuoteService:
             currency=version.currency,
             payment_terms=payment_terms or version.payment_terms,
             valid_until=version.valid_until,
+            # Carried forward unless the revision explicitly changes it, so a
+            # revision does not silently drop an order-level concession.
+            order_discount_pct=(
+                order_discount_pct
+                if order_discount_pct is not None
+                else version.order_discount_pct
+            ),
         )
         session.add(new_version)
         await session.flush()
@@ -722,7 +930,10 @@ class QuoteService:
                     clone.notes = data["notes"]
                 if data.get("recurring_periods") is not None:
                     clone.recurring_periods = int(data["recurring_periods"])
-            CommercialEngine.apply_to_line(clone)
+            CommercialEngine.apply_to_line(
+                clone,
+                order_discount_pct=Decimal(new_version.order_discount_pct or ZERO),
+            )
             session.add(clone)
 
         await session.flush()

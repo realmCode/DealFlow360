@@ -12,6 +12,10 @@ python-multipart==0.0.20
 email-validator==2.2.0
 greenlet==3.1.1
 
+# Report export (PDF module A7.2 requires PDF / XLS output)
+openpyxl==3.1.5
+reportlab==4.2.5
+
 # Testing
 pytest==8.3.4
 pytest-asyncio==0.25.0

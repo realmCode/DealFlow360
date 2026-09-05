@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from tests.conftest import build_canonical_quote
+from tests.conftest import build_canonical_quote, page_items
 
 ADMIN_ONLY_WRITES = (
     ("POST", "/admin/products", {
@@ -70,7 +70,7 @@ async def test_admin_can_reach_admin_writes(seeded) -> None:
 @pytest.mark.parametrize("role", ["sales", "manager", "finance", "ops", "admin"])
 async def test_every_internal_role_can_read_the_catalog(seeded, role) -> None:
     api = seeded[role]
-    products = (await api.get("/products", expect=200)).json()
+    products = page_items((await api.get("/products", expect=200)).json())
     assert len(products) >= 4
     await api.get("/policies", expect=200)
     await api.get("/warehouses", expect=200)
@@ -95,13 +95,22 @@ async def test_sales_cannot_use_approval_endpoints(seeded) -> None:
 
 @pytest.mark.parametrize("role", ["sales", "manager", "ops"])
 async def test_only_finance_or_admin_can_issue_invoices(seeded, role) -> None:
+    """The restriction is now a declared dependency, not an inline check.
+
+    That makes it visible in the OpenAPI schema, and it reports the permitted
+    roles in ``details.allowed_roles`` — which is what a frontend needs in
+    order to explain the refusal — rather than embedding them in prose.
+    """
     api = seeded[role]
     response = await api.post(
         "/billing/invoices",
         json={"billing_schedule_id": "00000000-0000-0000-0000-000000000000"},
     )
     assert response.status_code == 403
-    assert "FINANCE or ADMIN" in response.json()["error"]["message"]
+    body = response.json()["error"]
+    assert body["code"] == "FORBIDDEN"
+    assert body["details"]["allowed_roles"] == ["ADMIN", "FINANCE"]
+    assert body["details"]["your_role"] == role.upper()
 
 
 @pytest.mark.parametrize("role", ["sales", "manager", "finance"])
@@ -111,7 +120,25 @@ async def test_only_ops_or_admin_can_fulfill(seeded, role) -> None:
         "/orders/00000000-0000-0000-0000-000000000000/fulfill", json={}
     )
     assert response.status_code == 403
-    assert "OPS or ADMIN" in response.json()["error"]["message"]
+    body = response.json()["error"]
+    assert body["code"] == "FORBIDDEN"
+    assert body["details"]["allowed_roles"] == ["ADMIN", "OPS"]
+    assert body["details"]["your_role"] == role.upper()
+
+
+@pytest.mark.parametrize("role", ["manager", "finance"])
+async def test_only_ops_sales_or_admin_can_allocate(seeded, role) -> None:
+    """Allocation is deliberately broader than fulfilment.
+
+    A rep may reserve stock for their own order; only Ops ships it.
+    """
+    api = seeded[role]
+    response = await api.post(
+        "/orders/00000000-0000-0000-0000-000000000000/allocate", json={}
+    )
+    assert response.status_code == 403
+    body = response.json()["error"]
+    assert body["details"]["allowed_roles"] == ["ADMIN", "OPS", "SALES"]
 
 
 # --------------------------------------------------- customer portal role

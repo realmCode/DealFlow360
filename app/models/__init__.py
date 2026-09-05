@@ -1,4 +1,4 @@
-"""All 33 ORM models.
+"""All 38 ORM models.
 
 Importing this package registers every table on ``Base.metadata``, which is
 what Alembic autogenerate and the DB verification script both rely on.
@@ -15,9 +15,11 @@ from app.models.base import Base
 from app.models.billing_schedule import BillingSchedule
 from app.models.commercial_snapshot import CommercialSnapshot
 from app.models.contact import Contact
+from app.models.credit_note import CreditNote
 from app.models.customer_profile import CustomerProfile
 from app.models.deal import Deal
 from app.models.decision_impact import DecisionImpact
+from app.models.dismissed_recommendation import DismissedRecommendation
 from app.models.fulfillment import Fulfillment
 from app.models.idempotency_key import IdempotencyKey
 from app.models.inventory import Inventory
@@ -26,6 +28,7 @@ from app.models.invoice import Invoice
 from app.models.negotiation_message import NegotiationMessage
 from app.models.negotiation_thread import NegotiationThread
 from app.models.organization import Organization
+from app.models.organization_settings import OrganizationSettings
 from app.models.payment import Payment
 from app.models.policy import Policy
 from app.models.policy_result import PolicyResult
@@ -36,6 +39,7 @@ from app.models.quote_version import QuoteVersion
 from app.models.role import Role
 from app.models.sales_order import SalesOrder
 from app.models.sales_order_line import SalesOrderLine
+from app.models.sales_team import SalesTeam, SalesTeamMember
 from app.models.user import User
 from app.models.warehouse import Warehouse
 
@@ -78,10 +82,17 @@ EXPECTED_TABLES: tuple[str, ...] = (
     "warehouses",
     "inventory",
     "inventory_allocations",
-    # billing (3)
+    # billing (4)
     "billing_schedules",
     "invoices",
     "payments",
+    "credit_notes",
+    # configuration and reporting (3)
+    "organization_settings",
+    "sales_teams",
+    "sales_team_members",
+    # recommendations (1)
+    "dismissed_recommendations",
     # system (2)
     "audit_events",
     "idempotency_keys",
@@ -98,9 +109,11 @@ __all__ = [
     "BillingSchedule",
     "CommercialSnapshot",
     "Contact",
+    "CreditNote",
     "CustomerProfile",
     "Deal",
     "DecisionImpact",
+    "DismissedRecommendation",
     "Fulfillment",
     "IdempotencyKey",
     "Inventory",
@@ -109,6 +122,7 @@ __all__ = [
     "NegotiationMessage",
     "NegotiationThread",
     "Organization",
+    "OrganizationSettings",
     "Payment",
     "PriceList",
     "Policy",
@@ -121,6 +135,8 @@ __all__ = [
     "Role",
     "SalesOrder",
     "SalesOrderLine",
+    "SalesTeam",
+    "SalesTeamMember",
     "User",
     "Warehouse",
 ]

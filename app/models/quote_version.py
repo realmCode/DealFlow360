@@ -83,6 +83,19 @@ class QuoteVersion(UUIDPrimaryKeyMixin, OrgOwnedMixin, TimestampMixin, Base):
     )
     valid_until: Mapped[date | None] = mapped_column(nullable=True)
 
+    #: PDF B3 — "Apply line level or order level discounts". Applied on top of
+    #: the per-line discounts, then distributed back across lines pro-rata by
+    #: revenue share *before* policy evaluation, so moving a giveaway from the
+    #: lines to the order cannot route around per-line ceilings.
+    order_discount_pct: Mapped[Percent] = mapped_column(
+        nullable=False, default=Decimal("0.0000"), server_default=sa.text("0")
+    )
+    #: Derived from `order_discount_pct`; persisted so the figure is auditable
+    #: without recomputing it.
+    order_discount_amount: Mapped[Money] = mapped_column(
+        nullable=False, default=Decimal("0.00"), server_default=sa.text("0")
+    )
+
     # -------------------------- authoritative totals (backend-calculated)
     gross_revenue: Mapped[Money] = mapped_column(nullable=False, default=Decimal("0.00"))
     total_discount: Mapped[Money] = mapped_column(nullable=False, default=Decimal("0.00"))

@@ -61,6 +61,7 @@ _STATUS_CODES = {
     status.HTTP_405_METHOD_NOT_ALLOWED: "METHOD_NOT_ALLOWED",
     status.HTTP_409_CONFLICT: "CONFLICT",
     status.HTTP_422_UNPROCESSABLE_ENTITY: "VALIDATION_ERROR",
+    status.HTTP_429_TOO_MANY_REQUESTS: "RATE_LIMITED",
     status.HTTP_500_INTERNAL_SERVER_ERROR: "INTERNAL_ERROR",
 }
 
@@ -85,19 +86,22 @@ def create_app() -> FastAPI:
         title=settings.app_name,
         version=settings.app_version,
         description=DESCRIPTION,
-        docs_url="/docs",
-        redoc_url="/redoc",
-        openapi_url="/openapi.json",
+        docs_url="/docs" if settings.docs_enabled else None,
+        redoc_url="/redoc" if settings.docs_enabled else None,
+        openapi_url="/openapi.json" if settings.docs_enabled else None,
         lifespan=lifespan,
     )
 
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origin_list,
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
-        expose_headers=["Idempotency-Key"],
+        # See Settings.effective_cors_allow_credentials: Starlette echoes the
+        # requesting Origin when a wildcard is combined with credentials, which
+        # would advertise trust in every site. Bearer auth needs neither.
+        allow_credentials=settings.effective_cors_allow_credentials,
+        allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+        allow_headers=["Authorization", "Content-Type", "Idempotency-Key"],
+        expose_headers=["Idempotency-Key", "Retry-After", "Content-Disposition"],
     )
 
     # ---------------------------------------------------- error handling

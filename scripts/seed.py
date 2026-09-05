@@ -47,9 +47,12 @@ from app.models.organization import Organization
 from app.models.policy import Policy
 from app.models.product import Product
 from app.models.role import Role
+from app.models.sales_team import SalesTeam
 from app.models.warehouse import Warehouse
 from app.services.identity_service import IdentityService
 from app.services.inventory_service import InventoryService
+from app.services.sales_team_service import SalesTeamService
+from app.services.settings_service import SettingsService
 
 SELLER_NAME = "TechSupply Solutions"
 SELLER_SLUG = "techsupply-solutions"
@@ -240,7 +243,42 @@ SEED_POLICIES: tuple[dict[str, Any], ...] = (
         "severity": Severity.HIGH,
         "priority": 20,
     },
+    {
+        # The PAYMENT_TERMS_LIMIT evaluator was fully implemented and never
+        # fired, because nothing seeded a policy of this type. One row makes a
+        # fourth policy type demonstrable at no code cost.
+        "code": "GOLD-TERMS-60",
+        "name": "Gold tier payment terms limit",
+        "description": (
+            "Gold customers may be granted up to 60 days to pay. Anything "
+            "longer is a working-capital decision for Finance."
+        ),
+        "policy_type": PolicyType.PAYMENT_TERMS_LIMIT,
+        "customer_tier": CustomerTier.GOLD,
+        "product_category": None,
+        "threshold_value": Decimal("60.0000"),
+        "comparison": PolicyComparison.LTE,
+        "unit": PolicyUnit.DAYS,
+        "required_action": ApprovalLevel.FINANCE,
+        "severity": Severity.MEDIUM,
+        "priority": 30,
+    },
 )
+
+#: PDF A7.4 — reports filter by "Sales Team / Rep", so the demo needs a team.
+SEED_TEAMS: tuple[dict[str, Any], ...] = (
+    {
+        "code": "WEST",
+        "name": "West Enterprise",
+        "description": "Enterprise accounts west of the Rockies.",
+        "region": "West",
+        "manager_email": "manager@techsupply.com",
+        "member_emails": ("sales@techsupply.com", "manager@techsupply.com"),
+    },
+)
+
+#: PDF A6.2 — a promoted product so the upsell panel can show its tag.
+SEED_PROMOTED_SKUS: tuple[str, ...] = ("SB-SUPPORT-01",)
 
 
 async def seed_canonical_data(session: AsyncSession) -> dict[str, Any]:
@@ -255,6 +293,7 @@ async def seed_canonical_data(session: AsyncSession) -> dict[str, Any]:
         "warehouses": 0,
         "inventory": 0,
         "policies": 0,
+        "sales_teams": 0,
     }
 
     # ------------------------------------------------------------- roles
@@ -432,6 +471,48 @@ async def seed_canonical_data(session: AsyncSession) -> dict[str, Any]:
             session.add(Policy(organization_id=seller.id, **spec))
             await session.flush()
             created["policies"] += 1
+
+    # ------------------------------------------------- promoted products
+    for sku in SEED_PROMOTED_SKUS:
+        product = products.get(sku)
+        if product is not None and not product.is_promoted:
+            product.is_promoted = True
+            await session.flush()
+
+    # -------------------------------------------------- governance settings
+    # Materialise the row so the demo can show it being edited rather than
+    # created; SettingsService would otherwise create it on first read.
+    await SettingsService.for_org(session, seller.id)
+
+    # ------------------------------------------------------- sales teams
+    for spec in SEED_TEAMS:
+        existing = (
+            await session.execute(
+                select(SalesTeam).where(
+                    SalesTeam.organization_id == seller.id,
+                    SalesTeam.code == spec["code"],
+                )
+            )
+        ).scalar_one_or_none()
+        if existing is not None:
+            continue
+        manager = await IdentityService.by_email(session, spec["manager_email"])
+        members = []
+        for email in spec["member_emails"]:
+            member = await IdentityService.by_email(session, email)
+            if member is not None:
+                members.append(member.id)
+        await SalesTeamService.create(
+            session,
+            organization_id=seller.id,
+            code=spec["code"],
+            name=spec["name"],
+            description=spec["description"],
+            manager_user_id=manager.id if manager else None,
+            region=spec["region"],
+            member_user_ids=members,
+        )
+        created["sales_teams"] += 1
 
     return {
         "status": "ok",

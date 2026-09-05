@@ -58,6 +58,10 @@ class InvoiceCreate(ApiModel):
     issue_date: date | None = None
 
 
+class InvoiceVoidRequest(ApiModel):
+    reason: str = Field(min_length=1, max_length=2000)
+
+
 class InvoiceRead(TimestampedRead):
     invoice_number: str
     sales_order_id: uuid.UUID
@@ -72,6 +76,10 @@ class InvoiceRead(TimestampedRead):
     issue_date: date
     due_date: date
     paid_at: datetime | None = None
+    #: Computed on read: an ISSUED or PARTIALLY_PAID invoice whose due date has
+    #: passed. There is no scheduler, so this is derived rather than stored.
+    is_overdue: bool = False
+    days_overdue: int = 0
 
 
 class PaymentCreate(ApiModel):
