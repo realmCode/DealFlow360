@@ -5,6 +5,8 @@ import { NavLink, Outlet, useLocation } from "react-router-dom";
 import { useApprovalInbox, useControlTower } from "@/api/queries";
 import { useAuth, useCan } from "@/app/auth";
 import { moduleForPath, visibleModules } from "@/app/nav";
+import { isDemoMode } from "@/demo/accounts";
+import { RoleSwitcher } from "@/demo/RoleSwitcher";
 import { cn } from "@/lib/cn";
 
 /** The wordmark. A 360-degree arc closing on a rising bar — deals, cycled. */
@@ -105,6 +107,8 @@ export function InternalShell() {
           </nav>
 
           <div className="flex-1 lg:hidden" />
+
+          {isDemoMode() ? <RoleSwitcher /> : null}
 
           <RoleChip role={user?.role ?? ""} />
 

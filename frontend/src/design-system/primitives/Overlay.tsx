@@ -44,9 +44,9 @@ export function Dialog({
   open: boolean; onOpenChange: (v: boolean) => void;
   title: React.ReactNode; description?: React.ReactNode;
   children?: React.ReactNode; footer?: React.ReactNode;
-  width?: "sm" | "md" | "lg";
+  width?: "sm" | "md" | "lg" | "xl";
 }) {
-  const w = { sm: "max-w-sm", md: "max-w-lg", lg: "max-w-2xl" }[width];
+  const w = { sm: "max-w-sm", md: "max-w-lg", lg: "max-w-2xl", xl: "max-w-4xl" }[width];
   return (
     <DialogPrim.Root open={open} onOpenChange={onOpenChange}>
       <DialogPrim.Portal>
@@ -68,7 +68,7 @@ export function Dialog({
               <IconButton label="Close" size="sm"><X className="size-4" /></IconButton>
             </DialogPrim.Close>
           </div>
-          {children ? <div className="max-h-[65vh] overflow-y-auto px-4 py-4">{children}</div> : null}
+          {children ? <div className="max-h-[78vh] overflow-y-auto px-4 py-4">{children}</div> : null}
           {footer ? (
             <div className="flex items-center justify-end gap-2 border-t border-line bg-surface-sunken px-4 py-3">{footer}</div>
           ) : null}

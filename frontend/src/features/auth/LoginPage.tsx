@@ -1,9 +1,11 @@
-import { ArrowRight, ShieldCheck } from "lucide-react";
+import { ArrowRight, ShieldCheck, Users } from "lucide-react";
 import * as React from "react";
 import { Navigate, useLocation, useNavigate } from "react-router-dom";
 import { errorHint, errorTitle } from "@/api/errors";
-import { useAuth } from "@/app/auth";
+import { peekIntendedLanding, useAuth } from "@/app/auth";
 import { Button, FormField, Input, Panel } from "@/design-system";
+import { isDemoMode } from "@/demo/accounts";
+import { DemoAccountsDialog } from "@/demo/DemoAccountsDialog";
 
 const PROOF = [
   "Every total, margin and risk score is computed server-side",
@@ -12,16 +14,24 @@ const PROOF = [
 ];
 
 export function LoginPage() {
-  const { login, status } = useAuth();
+  const { login, status, user } = useAuth();
   const nav = useNavigate();
   const location = useLocation();
   const [email, setEmail] = React.useState("");
   const [password, setPassword] = React.useState("");
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<unknown>(null);
+  const [demoOpen, setDemoOpen] = React.useState(false);
+  const demo = isDemoMode();
 
+  // One authority for where a fresh session lands: an explicit intent from the
+  // demo picker, else wherever the visitor was heading, else the home of
+  // whichever application this user belongs to.
   if (status === "authenticated") {
-    const to = (location.state as { from?: string } | null)?.from ?? "/";
+    const to =
+      peekIntendedLanding() ??
+      (location.state as { from?: string } | null)?.from ??
+      (user?.is_internal === false ? "/portal" : "/");
     return <Navigate to={to} replace />;
   }
 
@@ -30,8 +40,8 @@ export function LoginPage() {
     setBusy(true);
     setError(null);
     try {
-      const user = await login(email.trim(), password);
-      nav(user.is_internal ? "/" : "/portal", { replace: true });
+      const signedIn = await login(email.trim(), password);
+      nav(signedIn.is_internal ? "/" : "/portal", { replace: true });
     } catch (err) {
       setError(err);
     } finally {
@@ -138,8 +148,49 @@ export function LoginPage() {
               Sign in
             </Button>
           </form>
+
+          {demo ? (
+            <>
+              <div className="my-6 flex items-center gap-3" role="separator">
+                <span className="h-px flex-1 bg-line" />
+                <span className="micro">or explore the seeded tenant</span>
+                <span className="h-px flex-1 bg-line" />
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setDemoOpen(true)}
+                className="group w-full overflow-hidden rounded-lg border border-line bg-surface p-3.5 text-left transition-all duration-fast hover:border-accent-400 hover:shadow-pop"
+              >
+                <span aria-hidden className="absolute" />
+                <span className="flex items-center gap-3">
+                  <span className="flex size-9 shrink-0 items-center justify-center rounded-md border border-accent-200 bg-accent-50 text-accent-600">
+                    <Users className="size-4" />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block font-ui text-md font-semibold text-content">Demo accounts</span>
+                    <span className="block text-sm text-content-muted">
+                      Six roles, from sales through to the customer
+                    </span>
+                  </span>
+                  <span className="flex -space-x-1.5">
+                    {["var(--accent-500)","var(--gov-500)","var(--risk-high)","var(--state-negotiating)","var(--risk-critical)","var(--policy-passed)"].map((c) => (
+                      <span key={c} aria-hidden className="size-2.5 rounded-full ring-2 ring-white" style={{ background: c }} />
+                    ))}
+                  </span>
+                  <ArrowRight className="size-4 shrink-0 text-content-faint transition-transform duration-fast group-hover:translate-x-0.5 group-hover:text-accent-600" />
+                </span>
+              </button>
+
+              <p className="mt-2.5 text-xs leading-[17px] text-content-faint">
+                Each one signs in through the real authentication flow against a seeded account &mdash; no
+                credentials are bypassed.
+              </p>
+            </>
+          ) : null}
         </div>
       </main>
+      {demo ? <DemoAccountsDialog open={demoOpen} onOpenChange={setDemoOpen} /> : null}
     </div>
   );
 }

@@ -2,6 +2,8 @@ import { LogOut } from "lucide-react";
 import { NavLink, Outlet } from "react-router-dom";
 import { useAuth } from "@/app/auth";
 import { Button } from "@/design-system";
+import { isDemoMode } from "@/demo/accounts";
+import { RoleSwitcher } from "@/demo/RoleSwitcher";
 import { cn } from "@/lib/cn";
 
 /**
@@ -40,9 +42,12 @@ export function PortalShell() {
             </span>
           </div>
 
-          <Button size="sm" variant="ghost" onClick={logout} icon={<LogOut className="size-3.5" />}>
-            Sign out
-          </Button>
+          <div className="flex items-center gap-2">
+            {isDemoMode() ? <RoleSwitcher variant="light" /> : null}
+            <Button size="sm" variant="ghost" onClick={logout} icon={<LogOut className="size-3.5" />}>
+              Sign out
+            </Button>
+          </div>
         </div>
 
         <nav aria-label="Portal sections" className="mx-auto max-w-5xl px-5">

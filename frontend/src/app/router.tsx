@@ -1,6 +1,6 @@
 import * as React from "react";
 import { createBrowserRouter, Navigate, Outlet, useLocation } from "react-router-dom";
-import { useAuth } from "@/app/auth";
+import { clearIntendedLanding, peekIntendedLanding, useAuth } from "@/app/auth";
 import { InternalShell } from "@/app/shells/InternalShell";
 import { PortalShell } from "@/app/shells/PortalShell";
 import { LoginPage } from "@/features/auth/LoginPage";
@@ -47,6 +47,28 @@ const PortalQuotePage = lazy(() => import("@/features/portal/PortalQuotePage"), 
 const PortalMessagesPage = lazy(() => import("@/features/portal/PortalMessagesPage"), "PortalMessagesPage");
 const PortalProfilePage = lazy(() => import("@/features/portal/PortalProfilePage"), "PortalProfilePage");
 
+/**
+ * Retires a landing intent once the app has arrived at it. Doing this in an
+ * effect rather than during a guard's render keeps render pure and makes the
+ * intent survive StrictMode's double invocation.
+ */
+function LandingIntent() {
+  const { pathname } = useLocation();
+  React.useEffect(() => {
+    if (peekIntendedLanding() === pathname) clearIntendedLanding();
+  }, [pathname]);
+  return null;
+}
+
+function RootLayout() {
+  return (
+    <>
+      <LandingIntent />
+      <Outlet />
+    </>
+  );
+}
+
 function Booting() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-canvas">
@@ -81,8 +103,17 @@ function Guard({ side, roles }: { side: "internal" | "portal"; roles?: RoleCode[
 
   if (status === "loading") return <Booting />;
   if (status === "anonymous") return <Navigate to="/login" replace state={{ from: location.pathname }} />;
-  if (side === "internal" && !user!.is_internal) return <Navigate to="/portal" replace />;
-  if (side === "portal" && user!.is_internal) return <Navigate to="/" replace />;
+
+  // The signed-in user is on the wrong side of the internal/portal split.
+  // If a switch asked for a specific destination, honour it — otherwise fall
+  // back to that side's home.
+  if (side === "internal" && !user!.is_internal) {
+    return <Navigate to={peekIntendedLanding() ?? "/portal"} replace />;
+  }
+  if (side === "portal" && user!.is_internal) {
+    return <Navigate to={peekIntendedLanding() ?? "/"} replace />;
+  }
+
   if (roles && !roles.includes(user!.role)) return <PermissionState need={roles.join(", ")} />;
 
   return <Outlet />;
@@ -91,6 +122,9 @@ function Guard({ side, roles }: { side: "internal" | "portal"; roles?: RoleCode[
 const adminOnly: RoleCode[] = ["ADMIN"];
 
 export const router = createBrowserRouter([
+  {
+    element: <RootLayout />,
+    children: [
   { path: "/login", element: <LoginPage /> },
   {
     element: <Guard side="internal" />,
@@ -175,5 +209,7 @@ export const router = createBrowserRouter([
         <EmptyState title="Page not found" body="That route does not exist in DealFlow360." />
       </div>
     ),
+  },
+    ],
   },
 ]);

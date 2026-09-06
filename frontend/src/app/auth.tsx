@@ -19,6 +19,40 @@ interface AuthValue {
   logout: () => void;
 }
 
+/**
+ * Where the app should land once a session is established.
+ *
+ * Two things can decide the destination after a login: the component that
+ * triggered it, and a route guard reacting to the new user landing on a route
+ * that is no longer legal for them (an internal user sitting on /portal, or the
+ * reverse). React Router's location lives in its own external store, so those
+ * two updates do not batch — whichever renders last wins, and that ordering is
+ * not deterministic.
+ *
+ * Rather than race, the caller states its intent here and every redirect
+ * authority reads it. The value is consumed once so it cannot leak into a
+ * later navigation.
+ */
+let intendedLanding: string | null = null;
+
+export const setIntendedLanding = (to: string | null) => {
+  intendedLanding = to;
+};
+
+/**
+ * Read without consuming.
+ *
+ * Guards read this during render, and render must stay pure — React invokes it
+ * twice under StrictMode, so a read-and-clear would hand the value to the
+ * discarded pass and leave the real one with nothing. `LandingIntent` clears it
+ * from an effect once the app has actually arrived.
+ */
+export const peekIntendedLanding = (): string | null => intendedLanding;
+
+export const clearIntendedLanding = () => {
+  intendedLanding = null;
+};
+
 const Ctx = React.createContext<AuthValue | null>(null);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -61,9 +95,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
   }, [qc]);
 
+  /**
+   * Swap the session atomically.
+   *
+   * The token, the cache and the user all change together, and `status` only
+   * ever moves *to* "authenticated" — it never dips through "anonymous". That
+   * matters for switching account in place: a momentary anonymous state would
+   * let the route guard bounce the user to /login mid-switch.
+   */
   const adopt = React.useCallback(
     (res: LoginResponse) => {
       tokens.set(res.tokens);
+      // The incoming role must not read the outgoing role's cached data.
+      qc.clear();
       setUser(res.user);
       setStatus("authenticated");
       qc.setQueryData(qk.me, res.user);
@@ -81,6 +125,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       signup: async (body) => adopt(await api.post<LoginResponse>("/auth/signup", body, { raw: true })),
       logout: () => {
         // The API has no logout endpoint; the session is client-side state.
+        setIntendedLanding(null);
         tokens.clear();
         setUser(null);
         setStatus("anonymous");
