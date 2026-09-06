@@ -600,3 +600,53 @@ async def test_a_clean_quote_flows_straight_through(client) -> None:
 
     tower = (await sales.get("/dashboard/control-tower", expect=200)).json()
     assert tower["counts"]["total_open"] == 0
+
+
+async def test_seeding_twice_creates_nothing_the_second_time(client) -> None:
+    """The demo dataset must be safe to re-run against a live database.
+
+    Re-seeding is the first thing anyone does when a demo misbehaves, so a
+    second run has to be inert rather than duplicating the tenant or resetting
+    stock that a quote already reserved.
+    """
+    from app.db import get_sessionmaker
+    from scripts.seed import seed_canonical_data
+
+    async with get_sessionmaker()() as s:
+        first = await seed_canonical_data(s)
+        await s.commit()
+
+    assert any(count > 0 for count in first["created"].values()), (
+        "the first run must actually create the tenant"
+    )
+
+    async with get_sessionmaker()() as s:
+        second = await seed_canonical_data(s)
+        await s.commit()
+
+    assert second["idempotent"] is True
+    assert second["created"] == dict.fromkeys(first["created"], 0)
+    # Identity must be stable: a re-seed cannot orphan quotes written against
+    # the ids the first run handed out.
+    for key in (
+        "seller_organization_id",
+        "customer_organization_id",
+        "customer_profile_id",
+    ):
+        assert second[key] == first[key], f"{key} changed on re-seed"
+    assert second["products"] == first["products"]
+    assert second["warehouses"] == first["warehouses"]
+
+    # Re-seeding must not disturb stock that is already reserved.
+    ops = await login(client, "ops@techsupply.com")
+    before = {row["id"]: row for row in page_items((await ops.get("/inventory", expect=200)).json())}
+
+    async with get_sessionmaker()() as s:
+        await seed_canonical_data(s)
+        await s.commit()
+
+    after = {row["id"]: row for row in page_items((await ops.get("/inventory", expect=200)).json())}
+    assert after.keys() == before.keys()
+    for row_id, row in after.items():
+        assert row["quantity_on_hand"] == before[row_id]["quantity_on_hand"]
+        assert row["quantity_reserved"] == before[row_id]["quantity_reserved"]

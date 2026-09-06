@@ -232,7 +232,7 @@ alembic revision --autogenerate -m "description"
 Alembic reads the URL from `app.config`, so migrations and the app can never
 disagree about which database they mean.
 
-**Verification script** — asserts the 33 tables, foreign keys, the business
+**Verification script** — asserts the 38 tables, foreign keys, the business
 constraints, the partial unique indexes, that no column is floating point, and
 that no timestamp is naive:
 
@@ -256,7 +256,7 @@ python -m scripts.verify_db
 VERIFICATION PASSED
 ```
 
-### The 33 tables
+### The 38 tables
 
 | Group | Tables |
 |---|---|
@@ -347,7 +347,7 @@ ENVIRONMENT=test pytest -m concurrency     # row-locking tests only
 | File | Tests | Covers |
 |---|---:|---|
 | `test_auth.py` | 18 | signup, login, JWT, refresh, token-type confusion |
-| `test_models.py` | 22 | 33 tables, no floats, tz-aware, DB constraints |
+| `test_models.py` | 22 | 38 tables, no floats, tz-aware, DB constraints |
 | `test_commercial_engine.py` | 24 | Decimal arithmetic, totals, margin, snapshots |
 | `test_policy_engine.py` | 33 | ceilings, margin floor, blended risk, explainability |
 | `test_quote_versioning.py` | 39 | the full immutability matrix, revisions |

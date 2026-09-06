@@ -1,0 +1,127 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+    border-color: var(--line);
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+    font-feature-settings: "cv02", "cv03", "cv04";
+  }
+
+  body {
+    margin: 0;
+    background: var(--canvas);
+    color: var(--text);
+    font-family: var(--font-body);
+    font-size: 13px;
+    line-height: 20px;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-ui);
+    font-weight: 600;
+    color: var(--text);
+    margin: 0;
+  }
+
+  /* Every financial figure aligns on the decimal in a column. */
+  .num,
+  input[inputmode="decimal"],
+  input[type="number"] {
+    font-family: var(--font-num);
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum" 1, "zero" 1;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--accent-500);
+    outline-offset: 2px;
+    border-radius: var(--r-xs);
+  }
+
+  ::selection {
+    background: var(--accent-200);
+    color: var(--accent-800);
+  }
+
+  /* Slim scrollbars — dense tables scroll constantly. */
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb {
+    background: var(--ink-300);
+    border-radius: var(--r-pill);
+    border: 2px solid transparent;
+    background-clip: content-box;
+  }
+  ::-webkit-scrollbar-thumb:hover { background: var(--ink-400); background-clip: content-box; }
+}
+
+@layer components {
+  /* Micro-label: the small uppercase caption above a figure. Used everywhere
+     a number needs naming without stealing visual weight from the number. */
+  .micro {
+    font-family: var(--font-ui);
+    font-size: 10px;
+    line-height: 14px;
+    font-weight: 600;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+  }
+
+  /* The panel: a bordered surface. No shadow — borders do the work. */
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--r-lg);
+  }
+
+  .panel-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--line);
+    min-height: 44px;
+  }
+
+  /* Skeleton shimmer */
+  .shimmer {
+    position: relative;
+    overflow: hidden;
+    background: var(--ink-100);
+  }
+  .shimmer::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    transform: translateX(-100%);
+    background: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.65), transparent);
+    animation: shimmer 1400ms infinite;
+  }
+
+  /* Hairline grid used behind hero/decision surfaces — a faint technical
+     texture that reads as instrumentation rather than decoration. */
+  .grid-field {
+    background-image:
+      linear-gradient(to right, rgb(255 255 255 / 0.045) 1px, transparent 1px),
+      linear-gradient(to bottom, rgb(255 255 255 / 0.045) 1px, transparent 1px);
+    background-size: 28px 28px;
+  }
+}
+
+@layer utilities {
+  .tnum { font-variant-numeric: tabular-nums; }
+  .scrollbar-none { scrollbar-width: none; }
+  .scrollbar-none::-webkit-scrollbar { display: none; }
+}
