@@ -10,7 +10,7 @@ import type { AttentionItemRead, Severity } from "@/api/types";
 import { useAuth, useCan } from "@/app/auth";
 import { Page } from "@/app/shells/InternalShell";
 import {
-  ATTENTION_LABEL, Async, Badge, BulletGauge, Button, EmptyState, ErrorState, Metric, Money,
+  ATTENTION_LABEL, Async, Badge, BulletGauge, Button, EmptyState, ErrorState, Money,
   Panel, PanelHead, Percent, RiskBadge, SEVERITY, Score, SectionLabel, SeverityBadge,
   Skeleton, SkeletonMetrics, toast,
 } from "@/design-system";
@@ -168,31 +168,41 @@ export function CommandCenter() {
       ) : tower.isError ? (
         <Panel><ErrorState error={tower.error} onRetry={tower.refetch} compact /></Panel>
       ) : (
-        <div className="grid grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-5">
-          {SEV_ORDER.map((sev) => {
-            const n = (counts?.[sev.toLowerCase() as keyof typeof counts] as number) ?? 0;
-            const tone = SEVERITY[sev];
-            return (
-              <Panel key={sev} rail={n > 0 ? tone.fg : "var(--ink-200)"} className="px-3.5 py-2.5">
-                <Metric
-                  label={`${tone.label} severity`}
-                  size="lg"
-                  tone={n > 0 ? tone.fg : "var(--ink-400)"}
-                >
-                  {n}
-                </Metric>
-              </Panel>
-            );
-          })}
-          <Panel rail="var(--accent-500)" className="px-3.5 py-2.5">
-            <Metric label="Open in total" size="lg">
-              {counts?.total_open ?? 0}
-            </Metric>
-          </Panel>
-        </div>
+        <Panel>
+          <div className="grid grid-cols-2 gap-px bg-line md:grid-cols-3 xl:grid-cols-5">
+            {SEV_ORDER.map((sev) => {
+              const n = (counts?.[sev.toLowerCase() as keyof typeof counts] as number) ?? 0;
+              const tone = SEVERITY[sev];
+              const live = n > 0;
+              return (
+                <div key={sev} className="relative bg-surface px-4 py-3">
+                  <span
+                    aria-hidden
+                    className="absolute inset-x-4 top-0 h-[2px] rounded-b-full"
+                    style={{ background: live ? tone.fg : "transparent" }}
+                  />
+                  <div className="micro">{tone.label}</div>
+                  <div
+                    className="mt-1 font-ui text-[28px] font-semibold leading-[32px] tabular-nums"
+                    style={{ color: live ? tone.fg : "var(--ink-300)" }}
+                  >
+                    {n}
+                  </div>
+                </div>
+              );
+            })}
+            <div className="relative bg-surface px-4 py-3">
+              <span aria-hidden className="absolute inset-x-4 top-0 h-[2px] rounded-b-full bg-accent-500" />
+              <div className="micro">Open in total</div>
+              <div className="mt-1 font-ui text-[28px] font-semibold leading-[32px] tabular-nums text-content">
+                {counts?.total_open ?? 0}
+              </div>
+            </div>
+          </div>
+        </Panel>
       )}
 
-      <div className="mt-3 grid gap-3 xl:grid-cols-[minmax(0,1fr)_360px]">
+      <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1fr)_364px]">
         {/* -- the queue --------------------------------------------------- */}
         <Panel className="min-w-0">
           <PanelHead
@@ -248,7 +258,7 @@ export function CommandCenter() {
         </Panel>
 
         {/* -- side rail ---------------------------------------------------- */}
-        <div className="min-w-0 space-y-3">
+        <div className="min-w-0 space-y-4">
           {can.approve ? (
             <Panel>
               <PanelHead

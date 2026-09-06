@@ -36,14 +36,14 @@ export function Badge({
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-sm border font-ui font-medium whitespace-nowrap",
-        size === "sm" ? "h-5 px-1.5 text-2xs tracking-wide" : "h-6 px-2 text-xs",
+        "inline-flex items-center gap-1.5 rounded-[5px] border font-ui font-medium whitespace-nowrap",
+        size === "sm" ? "h-[20px] px-1.5 text-[10px] tracking-[0.02em]" : "h-[24px] px-2 text-[11px]",
         className,
       )}
       style={style}
     >
       {dot && variant !== "solid" && (
-        <span aria-hidden className="size-1.5 shrink-0 rounded-full" style={{ background: fg }} />
+        <span aria-hidden className="size-[5px] shrink-0 rounded-full" style={{ background: fg }} />
       )}
       {children ?? tone?.label}
     </span>
@@ -73,10 +73,10 @@ export function TierBadge({ tier }: { tier: string }) {
   const fg = palette[tier] ?? "var(--ink-600)";
   return (
     <span
-      className="inline-flex h-6 items-center gap-1.5 rounded-sm border px-2 font-ui text-xs font-semibold tracking-wide"
+      className="inline-flex h-[22px] items-center gap-1.5 rounded-[5px] border px-1.5 font-ui text-[10px] font-semibold uppercase tracking-[0.05em]"
       style={{ color: fg, borderColor: `${fg}40`, background: `${fg}12` }}
     >
-      <span aria-hidden className="size-1.5 rounded-full" style={{ background: fg }} />
+      <span aria-hidden className="size-[5px] rounded-full" style={{ background: fg }} />
       {tier.charAt(0) + tier.slice(1).toLowerCase()}
     </span>
   );

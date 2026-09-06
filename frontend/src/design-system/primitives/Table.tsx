@@ -67,14 +67,14 @@ export function DataTable<R>({
 
   if (rows.length === 0 && empty) return <>{empty}</>;
 
-  const h = dense ? "h-8" : "h-9";
+  const h = dense ? "h-[34px]" : "h-[38px]";
 
   return (
     <div className={cn("w-full overflow-x-auto", className)}>
       <table className="w-full border-collapse text-left">
         {caption ? <caption className="sr-only">{caption}</caption> : null}
         <thead className={cn(stickyHeader && "sticky top-0 z-10")}>
-          <tr className="border-b border-line bg-surface-sunken">
+          <tr className="border-b border-line bg-surface-sunken/80 backdrop-blur-[2px]">
             {rail ? <th className="w-[3px] p-0" aria-hidden /> : null}
             {columns.map((c) => {
               const active = sort?.id === c.id;
@@ -86,7 +86,7 @@ export function DataTable<R>({
                   style={c.width ? { width: c.width } : undefined}
                   aria-sort={active ? (sort!.dir === "asc" ? "ascending" : "descending") : sortable ? "none" : undefined}
                   className={cn(
-                    "h-8 whitespace-nowrap px-3 font-ui text-2xs font-semibold uppercase tracking-wider text-content-faint",
+                    "h-[34px] whitespace-nowrap px-3 font-ui text-[10px] font-semibold uppercase tracking-[0.075em] text-content-faint",
                     c.align === "right" && "text-right",
                     c.align === "center" && "text-center",
                     c.hideBelow && HIDE[c.hideBelow],
@@ -137,21 +137,21 @@ export function DataTable<R>({
                 tabIndex={onRowClick ? 0 : undefined}
                 role={onRowClick ? "button" : undefined}
                 className={cn(
-                  "border-b border-line/60 transition-colors duration-fast",
+                  "border-b border-line-soft transition-colors duration-fast last:border-b-0",
                   onRowClick &&
-                    "cursor-pointer hover:bg-accent-50 focus-visible:bg-accent-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent-500",
+                    "cursor-pointer hover:bg-accent-50/70 focus-visible:bg-accent-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent-500",
                 )}
               >
                 {rail ? (
                   <td className="w-[3px] p-0">
-                    <span aria-hidden className="block h-9 w-[3px]" style={{ background: railColor ?? "transparent" }} />
+                    <span aria-hidden className="block h-[38px] w-[3px]" style={{ background: railColor ?? "transparent" }} />
                   </td>
                 ) : null}
                 {columns.map((c) => (
                   <td
                     key={c.id}
                     className={cn(
-                      h, "px-3 text-sm text-content align-middle",
+                      h, "px-3 text-[13px] text-content align-middle",
                       c.align === "right" && "text-right",
                       c.align === "center" && "text-center",
                       c.hideBelow && HIDE[c.hideBelow],

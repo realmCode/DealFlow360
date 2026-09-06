@@ -8,24 +8,26 @@ type Size = "xs" | "sm" | "md" | "lg";
 
 const VARIANT: Record<Variant, string> = {
   primary:
-    "bg-accent-600 text-white border border-accent-700 hover:bg-accent-700 active:bg-accent-800 shadow-[inset_0_1px_0_0_rgb(255_255_255/0.12)]",
+    "bg-accent-600 text-white border border-accent-700/80 shadow-xs " +
+    "hover:bg-accent-700 active:bg-accent-800 " +
+    "shadow-[inset_0_1px_0_0_rgb(255_255_255/0.14),0_1px_2px_rgb(13_21_32/0.08)]",
   secondary:
-    "bg-white text-content border border-line-strong hover:bg-ink-50 active:bg-ink-100",
+    "bg-white text-content border border-line-strong shadow-xs hover:bg-ink-50 hover:border-ink-300 active:bg-ink-100",
   ghost: "bg-transparent text-content-secondary border border-transparent hover:bg-ink-100 hover:text-content",
   danger:
-    "bg-[var(--policy-violated)] text-white border border-[var(--policy-violated)] hover:brightness-95 active:brightness-90",
+    "bg-[var(--policy-violated)] text-white border border-[var(--policy-violated)] shadow-xs hover:brightness-[0.94] active:brightness-90",
   approve:
-    "bg-[var(--policy-passed)] text-white border border-[var(--policy-passed)] hover:brightness-95 active:brightness-90",
+    "bg-[var(--policy-passed)] text-white border border-[var(--policy-passed)] shadow-xs hover:brightness-[0.94] active:brightness-90",
   governance:
-    "bg-gov-500 text-white border border-gov-600 hover:bg-gov-600 active:bg-gov-700",
+    "bg-gov-500 text-white border border-gov-600 shadow-xs hover:bg-gov-600 active:bg-gov-700",
   link: "bg-transparent border-none text-accent-600 hover:text-accent-700 hover:underline underline-offset-2 px-0",
 };
 
 const SIZE: Record<Size, string> = {
-  xs: "h-6 px-2 text-xs gap-1 rounded-sm",
-  sm: "h-7 px-2.5 text-sm gap-1.5 rounded-sm",
-  md: "h-8 px-3 text-base gap-1.5 rounded-md",
-  lg: "h-10 px-4 text-md gap-2 rounded-md",
+  xs: "h-[26px] px-2 text-xs gap-1 rounded-sm",
+  sm: "h-[30px] px-2.5 text-[13px] gap-1.5 rounded-md",
+  md: "h-[34px] px-3 text-[13px] gap-1.5 rounded-md",
+  lg: "h-[38px] px-4 text-[14px] gap-2 rounded-md",
 };
 
 export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
@@ -44,7 +46,7 @@ export function Button({
     <Comp
       className={cn(
         "inline-flex select-none items-center justify-center whitespace-nowrap font-ui font-medium",
-        "transition-colors duration-fast ease-smooth cursor-pointer",
+        "transition-[background-color,border-color,color,box-shadow] duration-fast ease-smooth cursor-pointer",
         "disabled:pointer-events-none disabled:opacity-45",
         "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-500",
         VARIANT[variant], SIZE[size], className,
@@ -65,7 +67,7 @@ export function Button({
 export function IconButton({
   className, variant = "ghost", size = "md", label, children, ...props
 }: Omit<ButtonProps, "icon" | "asChild"> & { label: string }) {
-  const box = size === "xs" ? "size-6" : size === "sm" ? "size-7" : size === "lg" ? "size-10" : "size-8";
+  const box = size === "xs" ? "size-[26px]" : size === "sm" ? "size-[30px]" : size === "lg" ? "size-[38px]" : "size-[34px]";
   return (
     <button
       aria-label={label}

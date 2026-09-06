@@ -29,13 +29,13 @@ export function SkeletonText({ lines = 3, className }: { lines?: number; classNa
 export function SkeletonTable({ rows = 6, cols = 5 }: { rows?: number; cols?: number }) {
   return (
     <div role="status" aria-label="Loading" className="w-full">
-      <div className="flex h-9 items-center gap-4 border-b border-line px-3">
+      <div className="flex h-[34px] items-center gap-4 border-b border-line bg-surface-sunken/80 px-3">
         {Array.from({ length: cols }).map((_, i) => (
-          <Skeleton key={i} className="h-2.5 flex-1" />
+          <Skeleton key={i} className="h-2 flex-1" />
         ))}
       </div>
       {Array.from({ length: rows }).map((_, r) => (
-        <div key={r} className="flex h-9 items-center gap-4 border-b border-line/60 px-3">
+        <div key={r} className="flex h-[38px] items-center gap-4 border-b border-line-soft px-3">
           {Array.from({ length: cols }).map((_, c) => (
             <Skeleton key={c} className="h-3 flex-1" />
           ))}
@@ -76,18 +76,18 @@ function Shell({
     <div
       className={cn(
         "flex flex-col items-center justify-center text-center",
-        compact ? "gap-2 px-4 py-8" : "gap-3 px-6 py-14",
+        compact ? "gap-2.5 px-4 py-10" : "gap-3.5 px-6 py-16",
       )}
     >
       <div
-        className="flex size-10 items-center justify-center rounded-lg border"
-        style={{ color, borderColor: `${color}33`, background: `${color}0f` }}
+        className="flex size-11 items-center justify-center rounded-xl border"
+        style={{ color, borderColor: `${color}2e`, background: `${color}0d` }}
       >
         {icon}
       </div>
       <div className="max-w-md">
-        <p className="font-ui text-md font-semibold text-content">{title}</p>
-        {body ? <p className="mt-1 text-sm leading-[19px] text-content-muted">{body}</p> : null}
+        <p className="font-ui text-[15px] font-semibold tracking-[-0.01em] text-content">{title}</p>
+        {body ? <p className="mt-1.5 text-[13px] leading-[20px] text-content-muted">{body}</p> : null}
       </div>
       {action ? <div className="mt-1 flex items-center gap-2">{action}</div> : null}
     </div>

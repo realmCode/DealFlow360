@@ -15,7 +15,7 @@ export function Panel({
   return (
     <div
       className={cn(
-        "relative overflow-hidden border border-line bg-surface",
+        "relative overflow-hidden border border-line bg-surface shadow-xs",
         flush ? "rounded-none border-x-0" : "rounded-lg",
         className,
       )}
@@ -47,16 +47,16 @@ export function PanelHead({
     <div
       className={cn(
         "flex items-center justify-between gap-3 border-b border-line",
-        dense ? "min-h-[38px] px-3 py-1.5" : "min-h-[44px] px-4 py-2",
+        dense ? "min-h-[40px] px-3.5 py-2" : "min-h-[48px] px-4 py-2.5",
         className,
       )}
     >
       <div className="flex min-w-0 items-center gap-2">
         {icon ? <span className="shrink-0 text-content-muted">{icon}</span> : null}
         <div className="min-w-0">
-          <h2 className="truncate font-ui text-base font-semibold text-content">{title}</h2>
+          <h2 className="truncate font-ui text-[14px] font-semibold tracking-[-0.012em] text-content">{title}</h2>
           {subtitle ? (
-            <p className="truncate text-xs text-content-muted">{subtitle}</p>
+            <p className="mt-0.5 truncate text-[12px] leading-[16px] text-content-muted">{subtitle}</p>
           ) : null}
         </div>
       </div>
@@ -92,8 +92,8 @@ export function GovNote({
   }[tone];
   return (
     <div
-      className={cn("relative overflow-hidden rounded-md border py-2.5 pl-4 pr-3", className)}
-      style={{ background: palette.bg, borderColor: `${palette.rail}33` }}
+      className={cn("relative overflow-hidden rounded-md border py-2.5 pl-4 pr-3.5", className)}
+      style={{ background: palette.bg, borderColor: `${palette.rail}2e` }}
     >
       <span aria-hidden className="absolute inset-y-0 left-0 w-[3px]" style={{ background: palette.rail }} />
       {title ? (
@@ -102,7 +102,7 @@ export function GovNote({
           {title}
         </div>
       ) : null}
-      <div className="text-sm leading-[19px]" style={{ color: "var(--ink-800)" }}>
+      <div className="text-[13px] leading-[19px]" style={{ color: "var(--ink-800)" }}>
         {children}
       </div>
     </div>

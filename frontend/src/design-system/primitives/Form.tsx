@@ -11,10 +11,10 @@ import * as React from "react";
 import { cn } from "@/lib/cn";
 
 const FIELD =
-  "w-full rounded-md border border-line-strong bg-white px-2.5 text-base text-content " +
+  "w-full rounded-md border border-line-strong bg-white px-2.5 text-[13px] text-content shadow-xs " +
   "placeholder:text-content-faint transition-[border-color,box-shadow] duration-fast " +
-  "hover:border-ink-400 focus:border-accent-500 focus:outline-none focus:ring-2 focus:ring-accent-500/25 " +
-  "disabled:cursor-not-allowed disabled:bg-ink-50 disabled:text-content-muted";
+  "hover:border-ink-300 focus:border-accent-500 focus:outline-none focus:ring-[3px] focus:ring-accent-500/18 " +
+  "disabled:cursor-not-allowed disabled:bg-ink-50 disabled:text-content-muted disabled:shadow-none";
 
 let uid = 0;
 const useId = (given?: string) => React.useMemo(() => given ?? `f${++uid}`, [given]);
@@ -33,7 +33,7 @@ export function FormField({
       {label ? (
         <label
           htmlFor={fieldId}
-          className={cn("block font-ui text-sm font-medium text-content-secondary", inline && "shrink-0")}
+          className={cn("block font-ui text-[12px] font-medium text-content-secondary", inline && "shrink-0")}
         >
           {label}
           {required ? <span className="ml-0.5 text-[var(--policy-violated)]">*</span> : null}
@@ -58,7 +58,7 @@ export const Input = React.forwardRef<HTMLInputElement, Omit<React.InputHTMLAttr
     return (
       <input
         ref={ref}
-        className={cn(FIELD, size === "sm" ? "h-7" : "h-8", props.type === "number" && "num", className)}
+        className={cn(FIELD, size === "sm" ? "h-[30px]" : "h-[34px]", props.type === "number" && "num", className)}
         {...props}
       />
     );
@@ -87,7 +87,7 @@ export const NumericInput = React.forwardRef<
           // Permit only a well-formed decimal so nothing invalid reaches the API.
           if (next === "" || /^\d*\.?\d*$/.test(next)) onValueChange(next);
         }}
-        className={cn(FIELD, "num text-right", size === "sm" ? "h-7" : "h-8", suffix && "pr-7", className)}
+        className={cn(FIELD, "num text-right", size === "sm" ? "h-[30px]" : "h-[34px]", suffix && "pr-7", className)}
         {...props}
       />
       {suffix ? (
@@ -101,7 +101,7 @@ export const NumericInput = React.forwardRef<
 
 export const Textarea = React.forwardRef<HTMLTextAreaElement, React.TextareaHTMLAttributes<HTMLTextAreaElement>>(
   function Textarea({ className, ...props }, ref) {
-    return <textarea ref={ref} className={cn(FIELD, "min-h-[72px] resize-y py-2 leading-[19px]", className)} {...props} />;
+    return <textarea ref={ref} className={cn(FIELD, "min-h-[76px] resize-y py-2 leading-[19px]", className)} {...props} />;
   },
 );
 
@@ -117,7 +117,7 @@ export function SearchInput({
         onChange={(e) => onValueChange(e.target.value)}
         placeholder={placeholder}
         aria-label={placeholder}
-        className={cn(FIELD, "h-8 pl-8")}
+        className={cn(FIELD, "h-[34px] pl-8")}
       />
     </div>
   );
@@ -140,7 +140,7 @@ export function Select({
         aria-label={ariaLabel}
         className={cn(
           FIELD, "flex items-center justify-between gap-2 text-left cursor-pointer",
-          size === "sm" ? "h-7" : "h-8",
+          size === "sm" ? "h-[30px]" : "h-[34px]",
           className,
         )}
       >
@@ -183,7 +183,7 @@ export function Segmented<V extends string>({
   className?: string; ariaLabel: string;
 }) {
   return (
-    <div role="tablist" aria-label={ariaLabel} className={cn("inline-flex items-center gap-0.5 rounded-md border border-line bg-ink-50 p-0.5", className)}>
+    <div role="tablist" aria-label={ariaLabel} className={cn("inline-flex items-center gap-0.5 rounded-md border border-line bg-ink-100 p-[3px] shadow-xs", className)}>
       {options.map((o) => {
         const active = o.value === value;
         return (
@@ -194,8 +194,8 @@ export function Segmented<V extends string>({
             type="button"
             onClick={() => onValueChange(o.value)}
             className={cn(
-              "inline-flex h-6 cursor-pointer items-center gap-1.5 rounded-sm px-2.5 font-ui text-xs font-medium transition-colors duration-fast",
-              active ? "bg-white text-content shadow-[0_1px_2px_rgb(16_24_40/0.08)]" : "text-content-muted hover:text-content",
+              "inline-flex h-[26px] cursor-pointer items-center gap-1.5 rounded-[5px] px-2.5 font-ui text-[12px] font-medium transition-all duration-fast",
+              active ? "bg-white text-content shadow-sm" : "text-content-muted hover:text-content",
             )}
           >
             {o.label}

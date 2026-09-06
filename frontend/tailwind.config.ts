@@ -14,9 +14,10 @@ export default {
           200: t("ink-200"), 150: t("ink-150"), 100: t("ink-100"), 50: t("ink-50"),
         },
         accent: {
-          800: t("accent-800"), 700: t("accent-700"), 600: t("accent-600"),
-          500: t("accent-500"), 400: t("accent-400"), 200: t("accent-200"),
-          100: t("accent-100"), 50: t("accent-50"),
+          900: t("accent-900"), 800: t("accent-800"), 700: t("accent-700"),
+          600: t("accent-600"), 500: t("accent-500"), 400: t("accent-400"),
+          300: t("accent-300"), 200: t("accent-200"), 100: t("accent-100"),
+          50: t("accent-50"),
         },
         gov: {
           700: t("gov-700"), 600: t("gov-600"), 500: t("gov-500"),
@@ -28,7 +29,8 @@ export default {
         },
         canvas: t("canvas"),
         surface: { DEFAULT: t("surface"), sunken: t("surface-sunken") },
-        line: { DEFAULT: t("line"), strong: t("line-strong") },
+        line: { DEFAULT: t("line"), soft: t("line-soft"), strong: t("line-strong") },
+        rail: { DEFAULT: t("rail"), hover: t("rail-hover"), active: t("rail-active") },
         content: {
           DEFAULT: t("text"), secondary: t("text-secondary"),
           muted: t("text-muted"), faint: t("text-faint"), invert: t("text-invert"),
@@ -59,13 +61,15 @@ export default {
         lg: t("r-lg"), xl: t("r-xl"), pill: t("r-pill"),
       },
       boxShadow: {
+        xs: t("shadow-xs"),
+        sm: t("shadow-sm"),
         pop: t("shadow-pop"),
         overlay: t("shadow-overlay"),
         ring: t("ring"),
       },
       spacing: {
-        header: t("header-h"),
-        subnav: t("subnav-h"),
+        topbar: t("topbar-h"),
+        sidebar: t("sidebar-w"),
         row: t("row-h"),
       },
       transitionTimingFunction: { smooth: t("ease") },
@@ -80,6 +84,10 @@ export default {
           from: { transform: "translateX(100%)" },
           to: { transform: "translateX(0)" },
         },
+        "slide-in-left": {
+          from: { transform: "translateX(-100%)" },
+          to: { transform: "translateX(0)" },
+        },
         shimmer: {
           "100%": { transform: "translateX(100%)" },
         },
@@ -92,6 +100,7 @@ export default {
         "fade-in": "fade-in 200ms cubic-bezier(0.32,0.72,0,1)",
         "slide-up": "slide-up 220ms cubic-bezier(0.32,0.72,0,1)",
         "slide-in-right": "slide-in-right 280ms cubic-bezier(0.32,0.72,0,1)",
+        "slide-in-left": "slide-in-left 240ms cubic-bezier(0.32,0.72,0,1)",
         shimmer: "shimmer 1400ms infinite",
         "rail-pulse": "rail-pulse 2.4s ease-in-out infinite",
       },

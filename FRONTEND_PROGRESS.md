@@ -22,9 +22,37 @@ Lint            clean (0 errors, 0 warnings)
 Unit tests      12 passed
 E2E             5 passed  (incl. full canonical journey)
 Production build passes
-Screens         31 routes · 86 screenshots at 3 resolutions
+Screens         31 routes · screenshots at 3 resolutions
 ==================================================
 ```
+
+## Visual redesign (latest pass)
+
+The application was re-skinned end to end without touching a single backend
+file — `git status` shows the change set is entirely under `frontend/`.
+
+| Before | After |
+|---|---|
+| Dark top-tab bar, flat 9-tab navigation | **Light sidebar + top bar.** Six workflow groups (Command, Sales, Operations, Billing, Intelligence, Reports, Administration), per-item icons, live badges on Command and Approvals, collapsible to 60px with tooltips, persisted in `localStorage` |
+| No location context | Breadcrumb trail in the top bar, prefixed with the tenant. A single-level crumb stays muted so it never shouts the page title twice |
+| Five separate bordered stat cards | One banded ledger with hairline dividers and a top accent per cell — the same information without the card soup |
+| Flat borders everywhere | A real elevation scale: hairline → `xs` on panels and controls → `pop` on hover → `overlay` for floating layers |
+| 13px controls on an 8px rhythm | Retuned control heights (26/30/34/38), tighter uppercase tracking, `-0.022em` display headings, 38px table rows |
+| Generic empty states | Larger composed states with a tinted glyph, a real sentence, and a recovery action |
+
+The palette was re-derived for contrast on white while keeping every semantic
+token bound to its backend enum. The signature amber governance rail, the
+per-row semantic rails and the tabular numerals are unchanged — they are what
+makes the product legible.
+
+The customer portal was deliberately left on its own visual language: warm
+ground, no sidebar, wider measure, larger type. It should not look like the
+console.
+
+**Verified after the redesign:** typecheck clean · lint clean · 12 unit tests ·
+**14/14 Playwright** including the canonical journey · production build ·
+zero console errors and zero horizontal overflow across all 31 routes at
+1280×720, 1440×900 and 1920×1080.
 
 **Status key** — `[ ]` not started · `[~]` in progress · `[x]` implemented **and verified**
 
@@ -90,9 +118,10 @@ npx playwright test          # visual QA + canonical journey vs the real API
 - [x] Money layer — Decimal end to end, **lint-enforced** against `Number()`/`parseFloat`
 - [x] API client — single fetch site, shared silent refresh, error normalisation
 
-## Phase 2 — Shell, auth, RBAC  `[x] 7/7`
+## Phase 2 — Shell, auth, RBAC  `[x] 8/8`
 
 - [x] Login (split narrative / form, real error states)
+- [x] Sidebar + top bar shell with breadcrumbs, collapse and tenant context
 - [x] Session bootstrap from `GET /users/me`; `is_internal` selects the shell
 - [x] Two disjoint route trees + guards
 - [x] Top-tab module bar with live counts + contextual subnav

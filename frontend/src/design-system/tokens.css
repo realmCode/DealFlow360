@@ -1,7 +1,7 @@
 /* ============================================================================
    DealFlow360 design tokens
    ----------------------------------------------------------------------------
-   Two rules govern this file.
+   Three rules govern this file.
 
    1. Semantic colour is derived from BACKEND ENUMS, not invented. Every risk,
       policy, severity and status token below maps 1:1 onto a value the API can
@@ -9,156 +9,170 @@
    2. Colour is never decorative. A red number always means margin or risk. If
       something needs emphasis but carries no state, it gets weight or space —
       not hue.
+   3. Structure comes from hairlines and spacing, not from shadows. Elevation is
+      reserved for things that genuinely float above the page.
 
-   Density values come from the ui-ux-pro-max "Data-Dense Dashboard" style row.
+   Density values follow the ui-ux-pro-max "Data-Dense Dashboard" row.
    ========================================================================== */
 
 :root {
-  /* -- neutral ramp (cool slate) ------------------------------------------ */
-  --ink-950: #080c15;
-  --ink-900: #101828;
-  --ink-850: #16203350;
-  --ink-800: #1d2939;
-  --ink-700: #344054;
-  --ink-600: #475467;
-  --ink-500: #667085;
-  --ink-400: #98a2b3;
-  --ink-300: #d0d5dd;
-  --ink-200: #e4e7ec;
-  --ink-150: #eceff3;
-  --ink-100: #f2f4f7;
-  --ink-50: #f8fafc;
+  /* -- neutral ramp: cool slate, tuned for long reading on white ---------- */
+  --ink-950: #070b12;
+  --ink-900: #0d1520;
+  --ink-850: #16202e;
+  --ink-800: #1c2837;
+  --ink-700: #33404f;
+  --ink-600: #4a5768;
+  --ink-500: #667487;
+  --ink-400: #8f9bab;
+  --ink-300: #c3cad4;
+  --ink-200: #dfe4ea;
+  --ink-150: #e9edf1;
+  --ink-100: #f1f4f7;
+  --ink-50: #f7f9fb;
   --white: #ffffff;
 
   /* -- accent: deep azure. Deliberately NOT #3B82F6, the default SaaS blue - */
-  --accent-800: #06356b;
-  --accent-700: #0b4a8f;
-  --accent-600: #0e5fb5;
-  --accent-500: #1470d4;
-  --accent-400: #3b8fe8;
-  --accent-200: #b9d8f8;
-  --accent-100: #e3f0fd;
+  --accent-900: #062b57;
+  --accent-800: #073a75;
+  --accent-700: #0a4e9b;
+  --accent-600: #0f62c4;
+  --accent-500: #1a76e0;
+  --accent-400: #4494ea;
+  --accent-300: #85b8f2;
+  --accent-200: #bcd8f8;
+  --accent-100: #e2eefc;
   --accent-50: #f2f8fe;
 
-  /* -- signature: amber "governance" rail.
-        The wireframe explains every business rule in an amber callout. That
-        becomes a first-class primitive here: anywhere the system explains
-        WHY it did something, it is amber-railed. ---------------------------- */
-  --gov-700: #92400e;
-  --gov-600: #b45309;
-  --gov-500: #d97706;
-  --gov-300: #fcd34d;
-  --gov-100: #fef3c7;
-  --gov-50: #fffbeb;
+  /* -- signature: the amber governance rail.
+        Anywhere the system explains WHY it did something, it is amber-railed.
+        Nothing else may use it. --------------------------------------------- */
+  --gov-700: #8a4508;
+  --gov-600: #ad5a09;
+  --gov-500: #d4790f;
+  --gov-300: #fbcb6b;
+  --gov-100: #fdf0d5;
+  --gov-50: #fffaf0;
 
   /* -- RiskBand: NONE LOW MEDIUM HIGH CRITICAL ---------------------------- */
-  --risk-none: #667085;
-  --risk-none-bg: #f2f4f7;
-  --risk-low: #0e9f6e;
-  --risk-low-bg: #e7f8f1;
-  --risk-medium: #b45309;
-  --risk-medium-bg: #fef3c7;
-  --risk-high: #c2410c;
-  --risk-high-bg: #ffedd5;
-  --risk-critical: #be123c;
-  --risk-critical-bg: #ffe4e9;
+  --risk-none: #667487;
+  --risk-none-bg: #f1f4f7;
+  --risk-low: #0a8a5f;
+  --risk-low-bg: #e4f6ee;
+  --risk-medium: #ad5a09;
+  --risk-medium-bg: #fdf0d5;
+  --risk-high: #bc4508;
+  --risk-high-bg: #fdeadd;
+  --risk-critical: #b3123c;
+  --risk-critical-bg: #fde7ec;
 
   /* -- PolicyResultStatus: PASSED WARNING VIOLATED NOT_APPLICABLE --------- */
-  --policy-passed: #0e9f6e;
-  --policy-passed-bg: #e7f8f1;
-  --policy-warning: #b45309;
-  --policy-warning-bg: #fef3c7;
-  --policy-violated: #be123c;
-  --policy-violated-bg: #ffe4e9;
-  --policy-na: #98a2b3;
-  --policy-na-bg: #f2f4f7;
+  --policy-passed: #0a8a5f;
+  --policy-passed-bg: #e4f6ee;
+  --policy-warning: #ad5a09;
+  --policy-warning-bg: #fdf0d5;
+  --policy-violated: #b3123c;
+  --policy-violated-bg: #fde7ec;
+  --policy-na: #8f9bab;
+  --policy-na-bg: #f1f4f7;
 
   /* -- Severity: LOW MEDIUM HIGH CRITICAL --------------------------------- */
-  --sev-low: #667085;
-  --sev-low-bg: #f2f4f7;
-  --sev-medium: #b45309;
-  --sev-medium-bg: #fef3c7;
-  --sev-high: #c2410c;
-  --sev-high-bg: #ffedd5;
-  --sev-critical: #be123c;
-  --sev-critical-bg: #ffe4e9;
+  --sev-low: #667487;
+  --sev-low-bg: #f1f4f7;
+  --sev-medium: #ad5a09;
+  --sev-medium-bg: #fdf0d5;
+  --sev-high: #bc4508;
+  --sev-high-bg: #fdeadd;
+  --sev-critical: #b3123c;
+  --sev-critical-bg: #fde7ec;
 
   /* -- QuoteVersionStatus: all 8 ------------------------------------------ */
-  --state-draft: #667085;
-  --state-draft-bg: #f2f4f7;
-  --state-pending: #b45309;
-  --state-pending-bg: #fef3c7;
-  --state-approved: #0e9f6e;
-  --state-approved-bg: #e7f8f1;
-  --state-sent: #1470d4;
-  --state-sent-bg: #e3f0fd;
-  --state-negotiating: #7c3aed;
-  --state-negotiating-bg: #f3ecfe;
-  --state-confirmed: #047857;
-  --state-confirmed-bg: #d9f2e6;
-  --state-rejected: #be123c;
-  --state-rejected-bg: #ffe4e9;
-  --state-superseded: #98a2b3;
-  --state-superseded-bg: #f2f4f7;
+  --state-draft: #667487;
+  --state-draft-bg: #f1f4f7;
+  --state-pending: #ad5a09;
+  --state-pending-bg: #fdf0d5;
+  --state-approved: #0a8a5f;
+  --state-approved-bg: #e4f6ee;
+  --state-sent: #0f62c4;
+  --state-sent-bg: #e2eefc;
+  --state-negotiating: #6d3bd4;
+  --state-negotiating-bg: #efe9fd;
+  --state-confirmed: #06694a;
+  --state-confirmed-bg: #d6f0e4;
+  --state-rejected: #b3123c;
+  --state-rejected-bg: #fde7ec;
+  --state-superseded: #8f9bab;
+  --state-superseded-bg: #f1f4f7;
 
   /* -- commercial semantics ----------------------------------------------- */
-  --margin-healthy: #0e9f6e;
-  --margin-thin: #b45309;
-  --margin-breach: #be123c;
-  --value-up: #0e9f6e;
-  --value-down: #be123c;
-  --value-flat: #667085;
+  --margin-healthy: #0a8a5f;
+  --margin-thin: #ad5a09;
+  --margin-breach: #b3123c;
+  --value-up: #0a8a5f;
+  --value-down: #b3123c;
+  --value-flat: #667487;
 
-  /* -- surfaces ------------------------------------------------------------ */
-  --chrome: #0b1220; /* application chrome — the console frame */
-  --chrome-hi: #16223a;
-  --chrome-line: #23304b;
-  --chrome-text: #cbd5e1;
-  --chrome-text-dim: #8296b4;
-
-  --canvas: #f4f6f9; /* the workspace behind panels */
+  /* -- surfaces ------------------------------------------------------------
+     A light shell with hairline separation. The dark treatment is reserved for
+     the sign-in narrative, where it earns its contrast. */
+  --canvas: #f5f7f9;
   --surface: #ffffff;
   --surface-sunken: #f8fafc;
   --surface-raised: #ffffff;
-  --line: #e4e7ec;
-  --line-strong: #d0d5dd;
 
-  --text: #101828;
-  --text-secondary: #475467;
-  --text-muted: #667085;
-  --text-faint: #98a2b3;
+  --rail: #ffffff;          /* sidebar */
+  --rail-hover: #f1f4f7;
+  --rail-active: #e2eefc;
+
+  --chrome: #0b1220;        /* sign-in panel only */
+  --chrome-hi: #16223a;
+  --chrome-line: #23304b;
+  --chrome-text: #c7d2e2;
+  --chrome-text-dim: #8296b4;
+
+  --line: #e7eaef;
+  --line-soft: #eef1f5;
+  --line-strong: #d5dae1;
+
+  --text: #0d1520;
+  --text-secondary: #4a5768;
+  --text-muted: #667487;
+  --text-faint: #8f9bab;
   --text-invert: #ffffff;
 
   /* -- type ---------------------------------------------------------------- */
   --font-ui: "Lexend", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-body: "Source Sans 3", ui-sans-serif, system-ui, -apple-system, sans-serif;
-  /* Money must align on the decimal in a column and stay scannable at 12px. */
+  /* Money must align on the decimal down a column and stay legible at 12px. */
   --font-num: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
 
-  /* -- density (ui-ux-pro-max Data-Dense Dashboard) ------------------------ */
-  --header-h: 52px;
-  --subnav-h: 40px;
-  --row-h: 36px;
+  /* -- density ------------------------------------------------------------- */
+  --topbar-h: 52px;
+  --sidebar-w: 236px;
+  --sidebar-w-collapsed: 60px;
+  --row-h: 38px;
   --row-h-tight: 32px;
-  --grid-gap: 8px;
+  --grid-gap: 10px;
   --panel-pad: 16px;
 
   /* -- radius: restrained. Heavy rounding at this density reads as a toy. -- */
   --r-xs: 3px;
-  --r-sm: 4px;
-  --r-md: 6px;
-  --r-lg: 8px;
-  --r-xl: 12px;
+  --r-sm: 5px;
+  --r-md: 7px;
+  --r-lg: 10px;
+  --r-xl: 14px;
   --r-pill: 999px;
 
-  /* -- elevation: borders do the work; shadow only for floating layers ----- */
-  --shadow-pop: 0 4px 12px -2px rgb(16 24 40 / 0.1), 0 2px 4px -2px rgb(16 24 40 / 0.06);
-  --shadow-overlay: 0 20px 40px -12px rgb(8 12 21 / 0.28), 0 4px 12px -4px rgb(8 12 21 / 0.12);
-  --ring: 0 0 0 3px rgb(20 112 212 / 0.28);
+  /* -- elevation: hairline first, shadow only for floating layers ---------- */
+  --shadow-xs: 0 1px 2px rgb(13 21 32 / 0.04);
+  --shadow-sm: 0 1px 3px rgb(13 21 32 / 0.06), 0 1px 2px -1px rgb(13 21 32 / 0.04);
+  --shadow-pop: 0 6px 16px -4px rgb(13 21 32 / 0.1), 0 2px 6px -2px rgb(13 21 32 / 0.06);
+  --shadow-overlay: 0 24px 48px -16px rgb(7 11 18 / 0.24), 0 6px 16px -6px rgb(7 11 18 / 0.12);
+  --ring: 0 0 0 3px rgb(26 118 224 / 0.22);
 
-  /* -- motion: Subtle tier only (motion.csv) ------------------------------- */
-  --t-fast: 140ms;
-  --t-base: 200ms;
+  /* -- motion: subtle tier only -------------------------------------------- */
+  --t-fast: 130ms;
+  --t-base: 190ms;
   --t-slow: 280ms;
   --ease: cubic-bezier(0.32, 0.72, 0, 1);
 }

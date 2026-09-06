@@ -12,7 +12,7 @@
 
   html {
     -webkit-text-size-adjust: 100%;
-    font-feature-settings: "cv02", "cv03", "cv04";
+    font-feature-settings: "cv02", "cv03", "cv04", "ss01";
   }
 
   body {
@@ -22,8 +22,10 @@
     font-family: var(--font-body);
     font-size: 13px;
     line-height: 20px;
+    letter-spacing: 0.004em;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
   }
 
   h1, h2, h3, h4, h5, h6 {
@@ -31,15 +33,17 @@
     font-weight: 600;
     color: var(--text);
     margin: 0;
+    letter-spacing: -0.014em;
   }
 
-  /* Every financial figure aligns on the decimal in a column. */
+  /* Every financial figure aligns on the decimal down a column. */
   .num,
   input[inputmode="decimal"],
   input[type="number"] {
     font-family: var(--font-num);
     font-variant-numeric: tabular-nums;
     font-feature-settings: "tnum" 1, "zero" 1;
+    letter-spacing: -0.012em;
   }
 
   :focus-visible {
@@ -50,52 +54,44 @@
 
   ::selection {
     background: var(--accent-200);
-    color: var(--accent-800);
+    color: var(--accent-900);
   }
 
   /* Slim scrollbars — dense tables scroll constantly. */
-  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar { width: 11px; height: 11px; }
   ::-webkit-scrollbar-track { background: transparent; }
   ::-webkit-scrollbar-thumb {
     background: var(--ink-300);
     border-radius: var(--r-pill);
-    border: 2px solid transparent;
+    border: 3px solid transparent;
     background-clip: content-box;
   }
   ::-webkit-scrollbar-thumb:hover { background: var(--ink-400); background-clip: content-box; }
 }
 
 @layer components {
-  /* Micro-label: the small uppercase caption above a figure. Used everywhere
-     a number needs naming without stealing visual weight from the number. */
+  /* Micro-label: the small uppercase caption above a figure. Used wherever a
+     number needs naming without stealing weight from the number itself. */
   .micro {
     font-family: var(--font-ui);
     font-size: 10px;
     line-height: 14px;
     font-weight: 600;
-    letter-spacing: 0.07em;
+    letter-spacing: 0.075em;
     text-transform: uppercase;
     color: var(--text-faint);
   }
 
-  /* The panel: a bordered surface. No shadow — borders do the work. */
+  /* The panel: a hairline surface. One radius, one border, no shadow —
+     borders carry the structure, which keeps a dense screen legible instead of
+     turning it into card soup. */
   .panel {
     background: var(--surface);
     border: 1px solid var(--line);
     border-radius: var(--r-lg);
   }
 
-  .panel-head {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-    padding: 10px 14px;
-    border-bottom: 1px solid var(--line);
-    min-height: 44px;
-  }
-
-  /* Skeleton shimmer */
+  /* Skeletons breathe rather than sweep. */
   .shimmer {
     position: relative;
     overflow: hidden;
@@ -106,22 +102,30 @@
     position: absolute;
     inset: 0;
     transform: translateX(-100%);
-    background: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.65), transparent);
-    animation: shimmer 1400ms infinite;
+    background: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.7), transparent);
+    animation: shimmer 1600ms cubic-bezier(0.4, 0, 0.2, 1) infinite;
   }
 
-  /* Hairline grid used behind hero/decision surfaces — a faint technical
-     texture that reads as instrumentation rather than decoration. */
+  /* Faint technical texture behind the sign-in narrative — instrumentation,
+     not decoration. */
   .grid-field {
     background-image:
-      linear-gradient(to right, rgb(255 255 255 / 0.045) 1px, transparent 1px),
-      linear-gradient(to bottom, rgb(255 255 255 / 0.045) 1px, transparent 1px);
-    background-size: 28px 28px;
+      linear-gradient(to right, rgb(255 255 255 / 0.04) 1px, transparent 1px),
+      linear-gradient(to bottom, rgb(255 255 255 / 0.04) 1px, transparent 1px);
+    background-size: 30px 30px;
   }
+
+  /* Table rows: hairline separation with a hover that does not shift layout. */
+  .row-hover {
+    transition: background-color var(--t-fast) var(--ease);
+  }
+  .row-hover:hover { background: var(--accent-50); }
 }
 
 @layer utilities {
   .tnum { font-variant-numeric: tabular-nums; }
   .scrollbar-none { scrollbar-width: none; }
   .scrollbar-none::-webkit-scrollbar { display: none; }
+  /* Optical alignment for the tight uppercase labels. */
+  .track-tight { letter-spacing: -0.01em; }
 }
