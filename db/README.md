@@ -8,11 +8,32 @@ Generated from a **clean** database — migrated to head and seeded, with none o
 the quotations, orders or approvals that accumulate from using or testing the
 app. Restore it and you get a pristine demo tenant.
 
-| File | Format | Size | Use |
+## Which one do you want?
+
+**This is the question that matters.** There are two datasets, and picking the
+wrong one is why a restored server can look empty.
+
+| | `*_demo` (clean) | `*_full` (working) |
+|---|---|---|
+| Setup rows — orgs, users, products, warehouses, policies | ✅ | ✅ |
+| Quotations, deals, approvals, orders, invoices, audit trail | **none** | 35 quotes · 23 orders · 4 invoices · 1,540 audit events |
+| Extra users beyond the six seeded | no | yes — 2 created by hand |
+| Quote titles | n/a | includes test noise (`UI journey 1788…`) |
+| Best for | a clean server you will demo *into* | reproducing what a working instance looks like |
+
+If you restored `demo` and the app looked empty, that was working as designed —
+it has no quotations because those are created by using the product. Restore
+`full` instead, or restore `demo` and run `python -m scripts.demo_reset`.
+
+## Files
+
+| File | Format | Size | Contents |
 |---|---|---:|---|
-| `dealflow360_demo.dump` | custom (`-Fc`) | 204 KB | **Preferred.** Restore with `pg_restore`; compressed, parallelisable, selective |
-| `dealflow360_demo.sql` | plain SQL | 145 KB | Restore with `psql`; readable, works anywhere, good for managed hosts that only accept SQL |
-| `dealflow360_schema.sql` | plain SQL | 122 KB | Structure only, no rows — for an empty environment you intend to seed yourself |
+| `dealflow360_demo.dump` | custom (`-Fc`) | 204 KB | Clean — schema + 34 setup rows |
+| `dealflow360_demo.sql` | plain SQL | 145 KB | Clean, as SQL |
+| `dealflow360_full.dump` | custom (`-Fc`) | 469 KB | **Everything** — schema + all working data |
+| `dealflow360_full.sql` | plain SQL | 2.7 MB | Everything, as SQL |
+| `dealflow360_schema.sql` | plain SQL | 122 KB | Structure only, no rows |
 
 Both full dumps were taken with `--no-owner --no-privileges`, so they restore
 under whatever role you connect as. No `dealflow360`-specific database user is
@@ -30,9 +51,18 @@ Create the database first — the dumps do not contain `CREATE DATABASE`.
 
 ```bash
 createdb -h <host> -U <user> dealflow360
+
+# everything, including quotations and orders
+pg_restore -h <host> -U <user> -d dealflow360 --no-owner --no-privileges \
+           dealflow360_full.dump
+
+# ...or the clean tenant instead
 pg_restore -h <host> -U <user> -d dealflow360 --no-owner --no-privileges \
            dealflow360_demo.dump
 ```
+
+Restoring on top of an existing database will collide on primary keys. Drop and
+recreate it first, or restore into a fresh one.
 
 ### Plain SQL
 
@@ -164,6 +194,11 @@ the real services.
 
 ## Verified
 
-This export was restored into two fresh databases (both `pg_restore` and `psql`
-paths), the API was started against the result, and `sales@techsupply.com`
-signed in and read products, policies and warehouses successfully.
+Both exports were restored into fresh databases and the API was started against
+each result.
+
+- **demo** — restored via `pg_restore` and `psql`; signed in and read products,
+  policies and warehouses.
+- **full** — restored via `pg_restore`; signed in and read **35 quotations, 23
+  orders and 13 open Command Center items**, confirming the working data
+  survives the round trip.
