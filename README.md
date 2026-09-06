@@ -1,5 +1,7 @@
 # DealFlow360 — Backend
 _Deployed at : https://odoo.realmx.io_
+
+_Note: Front end is in react, react is a single page Framework. make sure you donot access other paths._ 
 > An intelligent, self-governing sales operations platform.
 > **The backend is the source of truth.** It calculates and persists every
 > authoritative value; the client renders them.
